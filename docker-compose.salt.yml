@@ -1,0 +1,83 @@
+# Salt Master for OpsPilot
+# Docker Compose configuration for Salt Master
+
+services:
+  # Salt Master
+  salt-master:
+    image: saltstack/salt:latest
+    container_name: opspilot-salt-master
+    hostname: salt
+    ports:
+      - "4505:4505"  # Salt master publish port
+      - "4506:4506"  # Salt master respond port
+      - "8000:8000"  # Salt CherryPy API
+    volumes:
+      - ./salt:/srv/salt
+      - ./pillar:/srv/pillar
+      - salt_pki:/etc/salt/pki
+      - salt_cache:/var/cache/salt
+      - salt_logs:/var/log/salt
+    command: |
+      sh -c "
+        # Configure Salt Master
+        mkdir -p /etc/salt/master.d
+        echo 'interface: 0.0.0.0' >> /etc/salt/master.d/network.conf
+        echo 'publish_port: 4505' >> /etc/salt/master.d/network.conf
+        echo 'ret_port: 4506' >> /etc/salt/master.d/network.conf
+        echo 'user: root' >> /etc/salt/master.d/auth.conf
+        echo 'state_top: top.sls' >> /etc/salt/master.d/state.conf
+        echo 'file_roots:' >> /etc/salt/master.d/file_roots.conf
+        echo '  base:' >> /etc/salt/master.d/file_roots.conf
+        echo '    - /srv/salt' >> /etc/salt/master.d/file_roots.conf
+        echo 'pillar_roots:' >> /etc/salt/master.d/pillar_roots.conf
+        echo '  base:' >> /etc/salt/master.d/pillar_roots.conf
+        echo '    - /srv/pillar' >> /etc/salt/master.d/pillar_roots.conf
+        echo 'auto_accept: False' >> /etc/salt/master.d/auth.conf
+        echo 'open_mode: False' >> /etc/salt/master.d/auth.conf
+
+        # Configure Salt API
+        echo 'rest_cherrypy:' >> /etc/salt/master.d/api.conf
+        echo '  port: 8000' >> /etc/salt/master.d/api.conf
+        echo '  host: 0.0.0.0' >> /etc/salt/master.d/api.conf
+        echo '  debug: False' >> /etc/salt/master.d/api.conf
+        echo '  ssl_crt: /etc/salt/pki/api/cert.pem' >> /etc/salt/master.d/api.conf
+        echo '  ssl_key: /etc/salt/pki/api/key.pem' >> /etc/salt/master.d/api.conf
+        echo 'external_auth:' >> /etc/salt/master.d/api.conf
+        echo '  pam:' >> /etc/salt/master.d/api.conf
+        echo '    saltapi:' >> /etc/salt/master.d/api.conf
+        echo '      - .*' >> /etc/salt/master.d/api.conf
+        echo '      - @wheel' >> /etc/salt/master.d/api.conf
+        echo '      - @runner' >> /etc/salt/master.d/api.conf
+        echo '      - @jobs' >> /etc/salt/master.d/api.conf
+
+        # Create user for Salt API
+        echo 'saltapi:saltapi' | chpasswd
+
+        # Start Salt Master
+        salt-master -l debug &
+
+        # Start Salt API
+        salt-api -l debug
+
+        # Keep container running
+        tail -f /dev/null
+      "
+    networks:
+      - opspilot-network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "salt-api", "--version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  salt_pki:
+  salt_cache:
+  salt_logs:
+
+networks:
+  opspilot-network:
+    external: true

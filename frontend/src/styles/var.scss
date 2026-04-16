@@ -1,0 +1,4 @@
+/* global css variable */
+// Import HashiCorp theme first
+@use './theme/hashicorp' as hc;
+$primary-color: var(--opspilot-color-primary);

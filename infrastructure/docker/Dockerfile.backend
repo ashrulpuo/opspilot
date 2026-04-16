@@ -1,0 +1,41 @@
+# OpsPilot Backend Dockerfile
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    POETRY_VERSION=1.7.1 \
+    POETRY_HOME=/opt/poetry \
+    POETRY_NO_INTERACTION=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 -
+ENV PATH="$POETRY_HOME/bin:$PATH"
+
+# Set working directory
+WORKDIR /app
+
+# Copy pyproject.toml and poetry.lock first for caching
+COPY pyproject.toml ./
+
+# Install dependencies
+RUN poetry install --no-dev --no-root
+
+# Copy application code
+COPY . .
+
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash opspilot
+USER opspilot
+
+# Expose port
+EXPOSE 8000
+
+# Run application
+CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

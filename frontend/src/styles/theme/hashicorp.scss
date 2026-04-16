@@ -1,0 +1,516 @@
+/**
+ * HashiCorp Design System for OpsPilot
+ * Based on HashiCorp's enterprise-clean aesthetic
+ */
+
+// ============================================
+// Color Palette
+// ============================================
+
+// Brand Colors
+$hc-brand-black: #000000;
+$hc-brand-dark-charcoal: #15181e;
+$hc-brand-near-black: #0d0e12;
+
+// Neutral Scale
+$hc-neutral-light-gray: #f1f2f3;
+$hc-neutral-mid-gray: #d5d7db;
+$hc-neutral-cool-gray: #b2b6bd;
+$hc-neutral-dark-gray: #656a76;
+$hc-neutral-charcoal: #3b3d45;
+$hc-neutral-near-white: #efeff1;
+$hc-neutral-white: #ffffff;
+
+// Product Brand Colors
+$hc-terraform-purple: #7b42bc;
+$hc-vault-yellow: #ffcf25;
+$hc-waypoint-teal: #14c6cb;
+$hc-waypoint-teal-hover: #12b6bb;
+$hc-vagrant-blue: #1868f2;
+$hc-purple-accent: #911ced;
+$hc-purple-visited: #a737ff;
+
+// Semantic Colors
+$hc-action-blue: #1060ff;
+$hc-link-blue: #2264d6;
+$hc-bright-blue: #2b89ff;
+$hc-amber: #bb5a00;
+$hc-amber-light: #fbeabf;
+$hc-orange: #a9722e;
+$hc-red: #731e25;
+$hc-navy: #101a59;
+
+// OpsPilot Theme Colors (using HashiCorp palette)
+$opspilot-primary: $hc-brand-dark-charcoal;
+$opspilot-primary-light: $hc-brand-near-black;
+$opspilot-secondary: $hc-neutral-white;
+$opspilot-accent: $hc-bright-blue;
+
+// ============================================
+// Typography
+// ============================================
+
+// Font Families (using system fonts since we don't have HashiCorp Sans)
+$hc-font-family-heading:
+  system-ui,
+  -apple-system,
+  BlinkMacSystemFont,
+  'Segoe UI',
+  Helvetica,
+  Arial,
+  sans-serif;
+$hc-font-family-body:
+  system-ui,
+  -apple-system,
+  BlinkMacSystemFont,
+  'Segoe UI',
+  Helvetica,
+  Arial,
+  sans-serif;
+
+// Font Sizes (rem values)
+$hc-font-size-display-hero: 5.125rem; // 82px
+$hc-font-size-section-heading: 3.25rem; // 52px
+$hc-font-size-feature-heading: 2.625rem; // 42px
+$hc-font-size-subheading: 2.125rem; // 34px
+$hc-font-size-card-title: 1.625rem; // 26px
+$hc-font-size-small-title: 1.1875rem; // 19px
+$hc-font-size-body-emphasis: 1.0625rem; // 17px
+$hc-font-size-body-large: 1.25rem; // 20px
+$hc-font-size-body: 1rem; // 16px
+$hc-font-size-nav-link: 0.9375rem; // 15px
+$hc-font-size-small-body: 0.875rem; // 14px
+$hc-font-size-caption: 0.8125rem; // 13px
+$hc-font-size-label: 0.8125rem; // 13px
+
+// Font Weights
+$hc-font-weight-regular: 400;
+$hc-font-weight-medium: 500;
+$hc-font-weight-semibold: 600;
+$hc-font-weight-bold: 700;
+
+// Line Heights
+$hc-line-height-tight: 1.17;
+$hc-line-height-tight-alt: 1.19;
+$hc-line-height-tight-card: 1.21;
+$hc-line-height-relaxed: 1.5;
+$hc-line-height-standard: 1.63;
+$hc-line-height-loose: 1.69;
+
+// ============================================
+// Spacing (8px base unit)
+// ============================================
+
+$hc-space-1: 2px;
+$hc-space-2: 4px;
+$hc-space-3: 6px;
+$hc-space-4: 8px;
+$hc-space-5: 10px;
+$hc-space-6: 12px;
+$hc-space-7: 14px;
+$hc-space-8: 16px;
+$hc-space-9: 18px;
+$hc-space-10: 20px;
+$hc-space-11: 22px;
+$hc-space-12: 24px;
+$hc-space-16: 32px;
+$hc-space-20: 40px;
+$hc-space-24: 48px;
+$hc-space-32: 64px;
+$hc-space-40: 80px;
+
+// ============================================
+// Border Radius
+// ============================================
+
+$hc-radius-minimal: 2px;
+$hc-radius-subtle: 3px;
+$hc-radius-standard: 4px;
+$hc-radius-comfortable: 5px;
+$hc-radius-card: 8px;
+
+// ============================================
+// Shadows
+// ============================================
+
+// Whisper shadow (HashiCorp's signature subtle shadow)
+$hc-shadow-whisper:
+  rgba(97, 104, 117, 0.05) 0px 1px 1px,
+  rgba(97, 104, 117, 0.05) 0px 2px 2px;
+
+// Focus ring
+$hc-shadow-focus: 3px solid var(--opspilot-color-focus);
+
+// ============================================
+// Element Plus Overrides
+// ============================================
+
+:root {
+  // Primary colors
+  --opspilot-color-primary: #{$hc-brand-dark-charcoal};
+  --opspilot-color-primary-light: #{$hc-brand-near-black};
+  --opspilot-color-primary-light-9: #{$hc-neutral-light-gray};
+  --opspilot-color-success: #{$hc-waypoint-teal};
+  --opspilot-color-warning: #{$hc-amber};
+  --opspilot-color-danger: #{$hc-red};
+  --opspilot-color-info: #{$hc-bright-blue};
+
+  // Text colors
+  --opspilot-text-primary: #{$hc-brand-black};
+  --opspilot-text-regular: #{$hc-neutral-charcoal};
+  --opspilot-text-secondary: #{$hc-neutral-dark-gray};
+  --opspilot-text-placeholder: #{$hc-neutral-cool-gray};
+
+  // Border colors
+  --opspilot-border-color: #{$hc-neutral-mid-gray};
+  --opspilot-border-color-light: #{$hc-neutral-light-gray};
+  --opspilot-border-color-lighter: rgba(178, 182, 189, 0.4);
+
+  // Background colors
+  --opspilot-bg-color: #{$hc-neutral-white};
+  --opspilot-bg-color-page: #{$hc-neutral-light-gray};
+  --opspilot-bg-color-overlay: rgba(0, 0, 0, 0.8);
+
+  // Focus color
+  --opspilot-color-focus: #{$hc-bright-blue};
+
+  // Button styles
+  --opspilot-button-primary-bg: #{$hc-brand-dark-charcoal};
+  --opspilot-button-primary-text: #{$hc-neutral-mid-gray};
+  --opspilot-button-secondary-bg: #{$hc-neutral-white};
+  --opspilot-button-secondary-text: #{$hc-neutral-charcoal};
+  --opspilot-button-accent-bg: #{$hc-bright-blue};
+  --opspilot-button-accent-text: #{$hc-neutral-white};
+}
+
+// Dark mode
+html.dark {
+  --opspilot-color-primary: #{$hc-brand-dark-charcoal};
+  --opspilot-color-primary-light: #{$hc-brand-near-black};
+  --opspilot-color-primary-light-9: #{$hc-brand-dark-charcoal};
+  --opspilot-color-success: #{$hc-waypoint-teal};
+  --opspilot-color-warning: #{$hc-amber};
+  --opspilot-color-danger: #{$hc-red};
+  --opspilot-color-info: #{$hc-bright-blue};
+
+  --opspilot-text-primary: #{$hc-neutral-near-white};
+  --opspilot-text-regular: #{$hc-neutral-mid-gray};
+  --opspilot-text-secondary: #{$hc-neutral-dark-gray};
+  --opspilot-text-placeholder: #{$hc-neutral-cool-gray};
+
+  --opspilot-border-color: #{$hc-neutral-cool-gray};
+  --opspilot-border-color-light: #{$hc-brand-dark-charcoal};
+  --opspilot-border-color-lighter: rgba(178, 182, 189, 0.4);
+
+  --opspilot-bg-color: #{$hc-brand-dark-charcoal};
+  --opspilot-bg-color-page: #{$hc-brand-near-black};
+  --opspilot-bg-color-overlay: rgba(0, 0, 0, 0.8);
+
+  --opspilot-button-primary-bg: #{$hc-brand-near-black};
+  --opspilot-button-primary-text: #{$hc-neutral-near-white};
+  --opspilot-button-secondary-bg: #{$hc-neutral-white};
+  --opspilot-button-secondary-text: #{$hc-neutral-charcoal};
+}
+
+// ============================================
+// Typography Mixins
+// ============================================
+
+@mixin hc-typography-hero {
+  font-family: $hc-font-family-heading;
+  font-size: $hc-font-size-display-hero;
+  font-weight: $hc-font-weight-semibold;
+  line-height: $hc-line-height-tight;
+}
+
+@mixin hc-typography-section-heading {
+  font-family: $hc-font-family-heading;
+  font-size: $hc-font-size-section-heading;
+  font-weight: $hc-font-weight-semibold;
+  line-height: $hc-line-height-tight-alt;
+}
+
+@mixin hc-typography-card-title {
+  font-family: $hc-font-family-heading;
+  font-size: $hc-font-size-card-title;
+  font-weight: $hc-font-weight-bold;
+  line-height: $hc-line-height-tight-alt;
+}
+
+@mixin hc-typography-body {
+  font-family: $hc-font-family-body;
+  font-size: $hc-font-size-body;
+  font-weight: $hc-font-weight-regular;
+  line-height: $hc-line-height-standard;
+}
+
+@mixin hc-typography-label {
+  font-family: $hc-font-family-heading;
+  font-size: $hc-font-size-label;
+  font-weight: $hc-font-weight-semibold;
+  line-height: $hc-line-height-loose;
+  text-transform: uppercase;
+  letter-spacing: 1.3px;
+}
+
+// ============================================
+// Component Styles
+// ============================================
+
+// Button overrides
+.el-button--primary {
+  background-color: var(--opspilot-button-primary-bg);
+  border-color: var(--opspilot-border-color-lighter);
+  color: var(--opspilot-button-primary-text);
+  border-radius: $hc-radius-comfortable;
+  box-shadow: $hc-shadow-whisper;
+  padding: $hc-space-4 $hc-space-6;
+
+  &:hover {
+    background-color: var(--opspilot-color-primary-light);
+    border-color: var(--opspilot-border-color-lighter);
+    box-shadow: $hc-shadow-whisper;
+  }
+
+  &:focus {
+    outline: $hc-shadow-focus;
+  }
+}
+
+.el-button--default {
+  background-color: var(--opspilot-button-secondary-bg);
+  border-color: var(--opspilot-border-color-light);
+  color: var(--opspilot-button-secondary-text);
+  border-radius: $hc-radius-standard;
+  padding: $hc-space-3 $hc-space-5;
+
+  &:hover {
+    background-color: var(--opspilot-bg-color-page);
+    border-color: var(--opspilot-border-color);
+    box-shadow: $hc-shadow-whisper;
+  }
+
+  &:focus {
+    outline: $hc-shadow-focus;
+  }
+}
+
+.el-button--accent {
+  background-color: var(--opspilot-button-accent-bg);
+  border-color: transparent;
+  color: var(--opspilot-button-accent-text);
+  border-radius: $hc-radius-comfortable;
+  box-shadow: $hc-shadow-whisper;
+
+  &:hover {
+    background-color: $hc-link-blue;
+    box-shadow: $hc-shadow-whisper;
+  }
+
+  &:focus {
+    outline: $hc-shadow-focus;
+  }
+}
+
+// Input overrides
+.el-input__wrapper {
+  border-radius: $hc-radius-comfortable;
+  padding: $hc-space-3 $hc-space-4;
+  box-shadow: $hc-shadow-whisper;
+  background-color: var(--opspilot-bg-color);
+  border: 1px solid var(--opspilot-border-color);
+
+  &.is-focus {
+    outline: $hc-shadow-focus;
+    border-color: var(--opspilot-color-focus);
+  }
+
+  &:hover {
+    border-color: var(--opspilot-border-color);
+  }
+}
+
+html.dark .el-input__wrapper {
+  background-color: $hc-brand-near-black;
+  border-color: $hc-neutral-cool-gray;
+}
+
+// Card overrides
+.el-card {
+  border-radius: $hc-radius-card;
+  border: 1px solid var(--opspilot-border-color-light);
+  box-shadow: $hc-shadow-whisper;
+  background-color: var(--opspilot-bg-color);
+
+  .el-card__header {
+    @include hc-typography-card-title;
+    border-bottom: 1px solid var(--opspilot-border-color-light);
+    padding: $hc-space-8;
+  }
+
+  .el-card__body {
+    padding: $hc-space-8;
+  }
+}
+
+// Table overrides
+.el-table {
+  .el-table__header th.el-table__cell {
+    background-color: var(--opspilot-bg-color-page);
+    color: var(--opspilot-text-primary);
+    font-weight: $hc-font-weight-bold;
+    font-size: $hc-font-size-body;
+  }
+
+  .el-table__row {
+    .el-table__cell {
+      color: var(--opspilot-text-regular);
+      font-size: $hc-font-size-body;
+    }
+  }
+}
+
+// Menu/Sidebar
+.el-menu {
+  border-right: 1px solid var(--opspilot-border-color-light);
+
+  .el-menu-item,
+  .el-sub-menu__title {
+    border-radius: $hc-radius-standard;
+    margin: $hc-space-1 $hc-space-2;
+    color: var(--opspilot-text-regular);
+
+    &:hover {
+      background-color: var(--opspilot-bg-color-page);
+      color: var(--opspilot-text-primary);
+    }
+
+    &.is-active {
+      background-color: var(--opspilot-color-primary);
+      color: var(--opspilot-text-primary);
+    }
+  }
+}
+
+// Dialog
+.el-dialog {
+  border-radius: $hc-radius-card;
+  box-shadow: $hc-shadow-whisper;
+
+  .el-dialog__header {
+    border-bottom: 1px solid var(--opspilot-border-color-light);
+    padding: $hc-space-8;
+
+    .el-dialog__title {
+      @include hc-typography-card-title;
+      font-size: $hc-font-size-small-title;
+    }
+  }
+
+  .el-dialog__body,
+  .el-dialog__footer {
+    padding: $hc-space-8;
+  }
+}
+
+// Form
+.el-form-item__label {
+  @include hc-typography-label;
+  color: var(--opspilot-text-regular);
+  font-size: $hc-font-size-small-body;
+}
+
+// Tag/Badge
+.el-tag {
+  border-radius: $hc-radius-comfortable;
+  padding: $hc-space-1 $hc-space-3;
+  font-size: $hc-font-size-small-body;
+  border: 1px solid var(--opspilot-border-color-light);
+  box-shadow: $hc-shadow-whisper;
+}
+
+// Alert
+.el-alert {
+  border-radius: $hc-radius-card;
+  border: 1px solid var(--opspilot-border-color-light);
+  box-shadow: $hc-shadow-whisper;
+}
+
+// Pagination
+.el-pagination {
+  .el-pager li {
+    border-radius: $hc-radius-standard;
+    margin: 0 $hc-space-1;
+
+    &.is-active {
+      background-color: var(--opspilot-color-primary);
+      color: var(--opspilot-text-primary);
+    }
+  }
+
+  button {
+    border-radius: $hc-radius-standard;
+  }
+}
+
+// Custom card class for HashiCorp style
+.hc-card {
+  background-color: var(--opspilot-bg-color);
+  border: 1px solid var(--opspilot-border-color-light);
+  border-radius: $hc-radius-card;
+  box-shadow: $hc-shadow-whisper;
+  padding: $hc-space-8;
+  transition: box-shadow 0.2s ease;
+
+  &:hover {
+    box-shadow:
+      $hc-shadow-whisper,
+      0 4px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  &.hc-card-dark {
+    background-color: var(--opspilot-bg-color);
+    border: 1px solid var(--opspilot-border-color);
+  }
+}
+
+// Custom label
+.hc-label {
+  @include hc-typography-label;
+  color: var(--opspilot-text-secondary);
+  margin-bottom: $hc-space-3;
+  display: block;
+}
+
+// Custom heading
+.hc-heading {
+  @include hc-typography-card-title;
+  color: var(--opspilot-text-primary);
+  margin-bottom: $hc-space-4;
+}
+
+// Custom body text
+.hc-text {
+  @include hc-typography-body;
+  color: var(--opspilot-text-regular);
+}
+
+// Custom link
+.hc-link {
+  color: var(--opspilot-link-blue);
+  text-decoration: none;
+  transition: color 0.2s ease;
+
+  &:hover {
+    color: var(--opspilot-bright-blue);
+    text-decoration: underline;
+  }
+}
+
+html.dark .hc-link {
+  color: var(--opspilot-action-blue);
+
+  &:hover {
+    color: var(--opspilot-bright-blue);
+  }
+}

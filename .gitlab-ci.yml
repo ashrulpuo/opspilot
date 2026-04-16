@@ -1,0 +1,109 @@
+# GitLab CI/CD Pipeline - OpsPilot
+# Monorepo with Backend (FastAPI) and Frontend (Vue 3)
+
+include:
+  - local: .gitlab-ci.backend.yml
+  - local: .gitlab-ci.frontend.yml
+
+# ============================================
+# Global Variables
+# ============================================
+
+variables:
+  # GitLab Container Registry
+  CI_REGISTRY: registry.gitlab.com
+  CI_REGISTRY_IMAGE: ${CI_REGISTRY}/${CI_PROJECT_PATH}
+  
+  # Kubernetes Contexts (set in GitLab CI/CD settings)
+  KUBE_CONTEXT_DEV: "dev-cluster"
+  KUBE_CONTEXT_STAGING: "staging-cluster"
+  KUBE_CONTEXT_PROD: "prod-cluster"
+  
+  # Deployment Timeouts
+  DEPLOY_TIMEOUT: "600"
+  
+  # Docker
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# ============================================
+# Pipeline Configuration
+# ============================================
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "production"
+    - if: $CI_COMMIT_TAG
+
+# ============================================
+# Jobs
+# ============================================
+
+# Trigger both backend and frontend builds on any commit
+trigger-all:
+  stage: build
+  image: alpine:latest
+  script:
+    - echo "Triggering backend and frontend pipelines"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_MESSAGE =~ /trigger-all/
+  when: manual
+  allow_failure: true
+
+# ============================================
+# Global Jobs
+# ============================================
+
+# Create release on tag
+create-release:
+  stage: deploy-production
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  script:
+    - release-cli create --name "Release $CI_COMMIT_TAG" --description "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG --ref $CI_COMMIT_SHA
+  only:
+    - tags
+  when: manual
+  tags:
+    - docker
+
+# Notify deployment status
+notify-success:
+  stage: deploy-production
+  image: alpine:latest
+  script:
+    - echo "Deployment successful! 🎉"
+    - echo "Environment: $CI_ENVIRONMENT_NAME"
+    - echo "URL: $CI_ENVIRONMENT_URL"
+  rules:
+    - if: $CI_JOB_STATUS == "success"
+  when: on_success
+  tags:
+    - docker
+
+notify-failure:
+  stage: deploy-production
+  image: alpine:latest
+  script:
+    - echo "Deployment failed! ❌"
+    - echo "Job: $CI_JOB_NAME"
+    - echo "Stage: $CI_JOB_STAGE"
+  rules:
+    - if: $CI_JOB_STATUS == "failed"
+  when: on_failure
+  tags:
+    - docker
+
+# ============================================
+# Stages
+# ============================================
+
+stages:
+  - test
+  - security
+  - build
+  - deploy-dev
+  - deploy-staging
+  - deploy-production

@@ -1,0 +1,158 @@
+---
+# Salt Master Deployment
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opspilot-salt-pvc
+  namespace: opspilot
+  labels:
+    app: opspilot
+    tier: automation
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opspilot-salt-master
+  namespace: opspilot
+  labels:
+    app: opspilot
+    tier: automation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opspilot
+      tier: automation
+  template:
+    metadata:
+      labels:
+        app: opspilot
+        tier: automation
+    spec:
+      containers:
+        - name: salt-master
+          image: saltstack/salt:latest
+          command:
+            - sh
+            - -c
+            - |
+              # Configure Salt Master
+              mkdir -p /etc/salt/master.d
+              echo 'interface: 0.0.0.0' >> /etc/salt/master.d/network.conf
+              echo 'publish_port: 4505' >> /etc/salt/master.d/network.conf
+              echo 'ret_port: 4506' >> /etc/salt/master.d/network.conf
+              echo 'user: root' >> /etc/salt/master.d/auth.conf
+              echo 'state_top: top.sls' >> /etc/salt/master.d/state.conf
+              echo 'file_roots:' >> /etc/salt/master.d/file_roots.conf
+              echo '  base:' >> /etc/salt/master.d/file_roots.conf
+              echo '    - /srv/salt' >> /etc/salt/master.d/file_roots.conf
+              echo 'pillar_roots:' >> /etc/salt/master.d/pillar_roots.conf
+              echo '  base:' >> /etc/salt/master.d/pillar_roots.conf
+              echo '    - /srv/pillar' >> /etc/salt/master.d/pillar_roots.conf
+              echo 'auto_accept: False' >> /etc/salt/master.d/auth.conf
+              echo 'open_mode: False' >> /etc/salt/master.d/auth.conf
+              
+              # Configure Salt API
+              echo 'rest_cherrypy:' >> /etc/salt/master.d/api.conf
+              echo '  port: 8000' >> /etc/salt/master.d/api.conf
+              echo '  host: 0.0.0.0' >> /etc/salt/master.d/api.conf
+              echo '  debug: False' >> /etc/salt/master.d/api.conf
+              echo '  ssl_crt: /etc/salt/pki/api/cert.pem' >> /etc/salt/master.d/api.conf
+              echo '  ssl_key: /etc/salt/pki/api/key.pem' >> /etc/salt/master.d/api.conf
+              echo 'external_auth:' >> /etc/salt/master.d/api.conf
+              echo '  pam:' >> /etc/salt/master.d/api.conf
+              echo '    saltapi:' >> /etc/salt/master.d/api.conf
+              echo '      - .*' >> /etc/salt/master.d/api.conf
+              echo '      - @wheel' >> /etc/salt/master.d/api.conf
+              echo '      - @runner' >> /etc/salt/master.d/api.conf
+              echo '      - @jobs' >> /etc/salt/master.d/api.conf
+              
+              # Create user for Salt API
+              echo 'saltapi:$(SALT_API_PASSWORD)' | chpasswd
+              
+              # Start Salt Master
+              salt-master -l debug &
+              
+              # Start Salt API
+              salt-api -l debug
+              
+              # Keep container running
+              tail -f /dev/null
+          ports:
+            - containerPort: 4505
+              name: salt-pub
+            - containerPort: 4506
+              name: salt-resp
+            - containerPort: 8000
+              name: salt-api
+          env:
+            - name: SALT_API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opspilot-secrets
+                  key: SALT_API_PASSWORD
+          volumeMounts:
+            - name: salt-data
+              mountPath: /srv/salt
+              subPath: salt
+            - name: salt-data
+              mountPath: /srv/pillar
+              subPath: pillar
+            - name: salt-pki
+              mountPath: /etc/salt/pki
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - which
+                - salt-api
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: salt-data
+          persistentVolumeClaim:
+            claimName: opspilot-salt-pvc
+        - name: salt-pki
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opspilot-salt-master
+  namespace: opspilot
+  labels:
+    app: opspilot
+    tier: automation
+spec:
+  ports:
+    - port: 4505
+      targetPort: 4505
+      name: salt-pub
+    - port: 4506
+      targetPort: 4506
+      name: salt-resp
+    - port: 8000
+      targetPort: 8000
+      name: salt-api
+  selector:
+    app: opspilot
+    tier: automation
+  type: ClusterIP

@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opspilot-config
+  namespace: opspilot
+  labels:
+    app: opspilot
+data:
+  APP_NAME: "OpsPilot"
+  APP_ENV: "production"
+  API_V1_STR: "/api/v1"
+  ALLOWED_ORIGINS: "https://app.opspilot.com,https://opspilot.com"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+  ALGORITHM: "HS256"
+  DATABASE_HOST: "opspilot-postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "opspilot"
+  DATABASE_USER: "opspilot"
+  REDIS_HOST: "opspilot-redis"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  VAULT_ADDR: "http://opspilot-vault:8200"
+  VAULT_ENGINE: "secret"
+  VAULT_VERIFY_SSL: "false"
+  SALT_API_URL: "http://opspilot-salt-master:8000"
+  CELERY_BROKER_URL: "redis://opspilot-redis:6379/1"
+  CELERY_RESULT_BACKEND: "redis://opspilot-redis:6379/2"
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  EMAIL_SMTP_HOST: "smtp.gmail.com"
+  EMAIL_SMTP_PORT: "587"
+  EMAIL_SMTP_USE_TLS: "true"
+  APP_URL: "https://app.opspilot.com"
+  FRONTEND_URL: "https://app.opspilot.com"
+  API_URL: "https://api.opspilot.com"
+  BACKEND_CORS_ORIGINS: "https://app.opspilot.com,https://opspilot.com"
+  BACKEND_HOST: "0.0.0.0"
+  BACKEND_PORT: "8000"
+  NGINX_SERVER_NAME: "app.opspilot.com"
+  NGINX_PORT: "80"

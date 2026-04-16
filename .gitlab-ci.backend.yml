@@ -1,0 +1,203 @@
+# GitLab CI/CD Pipeline - Backend
+# OpsPilot FastAPI Backend
+
+stages:
+  - test
+  - security
+  - build
+  - package
+  - deploy-dev
+  - deploy-staging
+  - deploy-production
+
+variables:
+  PYTHON_VERSION: "3.11"
+  POETRY_VERSION: "1.7.1"
+  DOCKER_IMAGE: ${CI_REGISTRY_IMAGE}/opspilot-backend
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Default image
+default:
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - pip install poetry==${POETRY_VERSION}
+    - poetry config virtualenvs.create false
+
+# ============================================
+# Test Stage
+# ============================================
+
+unit-tests:
+  stage: test
+  script:
+    - cd backend
+    - poetry install --with dev
+    - poetry run pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    paths:
+      - backend/htmlcov/
+      - backend/coverage.xml
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: backend/coverage.xml
+    expire_in: 7 days
+  tags:
+    - docker
+
+integration-tests:
+  stage: test
+  services:
+    - name: timescale/timescaledb:latest-pg15
+      alias: postgres
+      variables:
+        POSTGRES_DB: opspilot_test
+        POSTGRES_USER: opspilot
+        POSTGRES_PASSWORD: test_password
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    DATABASE_URL: "postgresql+asyncpg://opspilot:test_password@postgres:5432/opspilot_test"
+    REDIS_URL: "redis://redis:6379/0"
+  script:
+    - cd backend
+    - poetry install --with dev
+    - poetry run pytest tests/integration/ -v --asyncio-mode=auto
+  tags:
+    - docker
+
+# ============================================
+# Security Stage
+# ============================================
+
+security-scan:
+  stage: security
+  script:
+    - pip install safety bandit
+    - cd backend
+    - safety check --json > safety-report.json || true
+    - bandit -r app -f json > bandit-report.json || true
+  artifacts:
+    paths:
+      - backend/safety-report.json
+      - backend/bandit-report.json
+    expire_in: 7 days
+  allow_failure: true
+  tags:
+    - docker
+
+sast:
+  stage: security
+  include:
+    - template: Security/SAST.gitlab-ci.yml
+  variables:
+    SEARCH_MAX_DEPTH: 4
+  tags:
+    - docker
+
+dependency-scanning:
+  stage: security
+  include:
+    - template: Security/Dependency-Scanning.gitlab-ci.yml
+  tags:
+    - docker
+
+container-scanning:
+  stage: security
+  needs:
+    - build-backend
+  variables:
+    GIT_STRATEGY: none
+  include:
+    - template: Security/Container-Scanning.gitlab-ci.yml
+  tags:
+    - docker
+
+# ============================================
+# Build Stage
+# ============================================
+
+build-backend:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+  script:
+    - docker build -t ${DOCKER_IMAGE}:${CI_COMMIT_SHORT_SHA} -f Dockerfile.backend .
+    - docker build -t ${DOCKER_IMAGE}:latest -f Dockerfile.backend .
+    - docker push ${DOCKER_IMAGE}:${CI_COMMIT_SHORT_SHA}
+    - docker push ${DOCKER_IMAGE}:latest
+  tags:
+    - docker
+
+# ============================================
+# Deploy Stage
+# ============================================
+
+deploy-dev:
+  stage: deploy-dev
+  image: bitnami/kubectl:latest
+  environment:
+    name: development
+    url: https://dev.opspilot.com
+  script:
+    - kubectl config use-context ${KUBE_CONTEXT_DEV}
+    - kubectl set image deployment/opspilot-backend backend=${DOCKER_IMAGE}:${CI_COMMIT_SHORT_SHA} -n opspilot-dev
+    - kubectl rollout status deployment/opspilot-backend -n opspilot-dev
+  only:
+    - develop
+  tags:
+    - k8s
+
+deploy-staging:
+  stage: deploy-staging
+  image: bitnami/kubectl:latest
+  environment:
+    name: staging
+    url: https://staging.opspilot.com
+  script:
+    - kubectl config use-context ${KUBE_CONTEXT_STAGING}
+    - kubectl set image deployment/opspilot-backend backend=${DOCKER_IMAGE}:${CI_COMMIT_SHORT_SHA} -n opspilot-staging
+    - kubectl rollout status deployment/opspilot-backend -n opspilot-staging
+  only:
+    - main
+  when: manual
+  tags:
+    - k8s
+
+deploy-production:
+  stage: deploy-production
+  image: bitnami/kubectl:latest
+  environment:
+    name: production
+    url: https://app.opspilot.com
+  script:
+    - kubectl config use-context ${KUBE_CONTEXT_PROD}
+    - kubectl set image deployment/opspilot-backend backend=${DOCKER_IMAGE}:${CI_COMMIT_SHA} -n opspilot
+    - kubectl rollout status deployment/opspilot-backend -n opspilot
+  only:
+    - production
+  when: manual
+  tags:
+    - k8s
+
+# ============================================
+# Rollback
+# ============================================
+
+rollback-backend:
+  stage: deploy-production
+  image: bitnami/kubectl:latest
+  environment:
+    name: production
+    url: https://app.opspilot.com
+  script:
+    - kubectl config use-context ${KUBE_CONTEXT_PROD}
+    - kubectl rollout undo deployment/opspilot-backend -n opspilot
+    - kubectl rollout status deployment/opspilot-backend -n opspilot
+  when: manual
+  tags:
+    - k8s

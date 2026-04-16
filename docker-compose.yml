@@ -1,0 +1,100 @@
+# OpsPilot Local Development Environment
+# Docker Compose configuration for PostgreSQL, Redis, and Vault
+
+services:
+  # PostgreSQL with TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: opspilot-postgres
+    environment:
+      POSTGRES_DB: opspilot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5438:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - opspilot-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: opspilot-redis
+    ports:
+      - "6384:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - opspilot-network
+
+  # Vault
+  vault:
+    image: hashicorp/vault:latest
+    container_name: opspilot-vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-root-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    ports:
+      - "8201:8200"
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - opspilot-network
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Insight (optional - for Redis GUI)
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: opspilot-redis-insight
+    ports:
+      - "8002:8001"
+    volumes:
+      - redis_insight_data:/db
+    depends_on:
+      - redis
+    networks:
+      - opspilot-network
+
+  # pgAdmin (optional - for PostgreSQL GUI)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: opspilot-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@opspilot.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5051:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - opspilot-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  redis_insight_data:
+  pgadmin_data:
+
+networks:
+  opspilot-network:
+    driver: bridge

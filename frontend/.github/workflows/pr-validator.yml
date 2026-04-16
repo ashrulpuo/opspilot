@@ -1,0 +1,136 @@
+name: PR Validator
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  validate-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR Format
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            console.log('Validating PR format...');
+            console.log(`Title: ${pr.title}`);
+            console.log(`Body length: ${body.length}`);
+            console.log(`Commits: ${commits.data.length}`);
+
+            let validationErrors = [];
+            let debugInfo = [];
+
+            const hasIssueLink = body.includes('**Related Issue:** #') && !body.includes('**Related Issue:** #_');
+            if (!hasIssueLink) {
+              validationErrors.push('**Related Issue:** must link an issue (e.g. #123)');
+              debugInfo.push('Missing **Related Issue:** #...');
+            } else {
+              console.log('Issue link OK');
+            }
+
+            if (commits.data.length > 1) {
+              validationErrors.push(`PR must contain a single commit (found ${commits.data.length}); rebase to squash`);
+              debugInfo.push(`Commit count: ${commits.data.length}`);
+            } else {
+              console.log('Single commit OK');
+            }
+
+            const hasPRType = body.includes('- [x]') && (
+              body.includes('Bug fix') ||
+              body.includes('Feature') ||
+              body.includes('Documentation') ||
+              body.includes('Refactor') ||
+              body.includes('Performance') ||
+              body.includes('Tests') ||
+              body.includes('Build / CI') ||
+              body.includes('Release')
+            );
+            if (!hasPRType) {
+              validationErrors.push('Select exactly one PR type (check one box under PR type)');
+              debugInfo.push('Need "- [x]" with a type label');
+            } else {
+              console.log('PR type OK');
+            }
+
+            const hasChecklist = (body.includes('## Checklist') || body.includes('## 📋 Checklist')) &&
+              body.includes('- [x]') &&
+              (body.includes('Conventional Commits') || body.includes('[Conventional Commits]')) &&
+              body.includes('only one commit') &&
+              body.includes('rebase');
+
+            if (!hasChecklist) {
+              validationErrors.push('Complete the checklist (required items checked)');
+              debugInfo.push('Checklist section or required items missing');
+            } else {
+              console.log('Checklist OK');
+            }
+
+            if (validationErrors.length > 0) {
+              console.log('PR validation failed');
+              console.log('Errors:', validationErrors);
+
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  labels: ['needs-info']
+                });
+                console.log('Added needs-info label');
+              } catch (e) {
+                console.log('Label error:', e.message);
+              }
+
+              const commentBody = `**PR validation failed**\n\n### Issues\n\n${validationErrors.join('\n\n')}\n\nPlease update the PR body using the template.`;
+
+              try {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: commentBody
+                });
+                console.log('Posted comment');
+              } catch (e) {
+                console.log('Comment error:', e.message);
+              }
+
+              core.setFailed(`PR format validation failed: ${validationErrors.join(', ')}`);
+            } else {
+              console.log('PR validation passed');
+
+              const labelsToRemove = ['invalid', 'needs-info'];
+              for (const label of labelsToRemove) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    name: label
+                  });
+                  console.log(`Removed label ${label}`);
+                } catch (e) {
+                  console.log(`Label ${label} not present`);
+                }
+              }
+
+              console.log('PR is ready.');
+            }

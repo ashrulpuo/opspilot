@@ -1,0 +1,264 @@
+/* el-alert */
+.el-alert {
+  border: 1px solid;
+}
+
+/* Full-page maximize layout */
+.main-maximize {
+  .aside-split,
+  .el-aside,
+  .el-header,
+  .el-footer,
+  .tabs-box {
+    display: none !important;
+  }
+}
+
+/* mask image */
+.mask-image {
+  padding-right: 50px;
+  mask-image: linear-gradient(90deg, #000000 0%, #000000 calc(100% - 50px), transparent);
+}
+
+/* custom card */
+.card {
+  box-sizing: border-box;
+  padding: 20px;
+  overflow-x: hidden;
+  background-color: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  box-shadow: 0 0 12px rgb(0 0 0 / 5%);
+}
+
+/* ProTable without outer card (used when ProTable wraps its own chrome) */
+.no-card {
+  .card {
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .table-search {
+    padding: 18px 0 0 !important;
+    margin-bottom: 0 !important;
+  }
+}
+
+/* content-box (typical content wrapper) */
+.content-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  .text {
+    margin: 20px 0 30px;
+    font-size: 23px;
+    font-weight: bold;
+    color: var(--el-text-color-regular);
+  }
+  .el-descriptions {
+    width: 100%;
+    padding: 40px 0 0;
+    .el-descriptions__title {
+      font-size: 18px;
+    }
+    .el-descriptions__label {
+      width: 200px;
+    }
+  }
+}
+
+/* main-box (treeFilter + table: horizontal flex layout) */
+.main-box {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  .table-box {
+    overflow: hidden;
+  }
+}
+
+/* proTable */
+.table-box,
+.table-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+
+  // Table search toolbar
+  .table-search {
+    padding: 18px 18px 0;
+    margin-bottom: 10px;
+    .el-form {
+      .el-form-item__content > * {
+        width: 100%;
+      }
+
+      // Tighten range picker vertical padding
+      .el-range-editor.el-input__wrapper {
+        padding: 0 10px;
+      }
+    }
+    .operation {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      margin-bottom: 18px;
+    }
+  }
+
+  // Table header toolbar
+  .table-header {
+    .header-button-lf,
+    .header-button-ri {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px 12px;
+      margin-bottom: 15px;
+      .el-button:not(.el-input .el-button) {
+        margin-left: 0;
+      }
+    }
+    .header-button-lf {
+      float: left;
+    }
+    .header-button-ri {
+      float: right;
+    }
+  }
+
+  // el-table
+  .el-table {
+    flex: 1;
+
+    // Safari table width fix https://github.com/HalseySpicy/Geeker-Admin/issues/83
+    table {
+      width: 100%;
+    }
+    .el-table__header th.el-table__cell {
+      height: 45px;
+      font-size: 15px;
+      font-weight: bold;
+      color: var(--el-text-color-primary);
+      background-color: var(--el-fill-color-light);
+    }
+    .el-table__row {
+      height: 45px;
+      font-size: 14px;
+      .move {
+        cursor: move;
+        .el-icon {
+          cursor: move;
+        }
+      }
+    }
+
+    // Header cell text wrapping
+    .el-table__header .el-table__cell > .cell {
+      // white-space: nowrap;
+      white-space: wrap;
+    }
+
+    // Empty-state vertical alignment (Element Plus)
+    .el-table__empty-block {
+      position: absolute;
+      .table-empty {
+        line-height: 30px;
+        img {
+          display: inline-flex;
+        }
+      }
+    }
+
+    // Avatar / image column
+    .table-image {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+    }
+  }
+
+  // Pagination
+  .el-pagination {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 20px;
+  }
+}
+
+/* el-table density */
+.el-table--small {
+  .el-table__header th {
+    height: 40px !important;
+    font-size: 14px !important;
+  }
+  .el-table__row {
+    height: 40px !important;
+    font-size: 13px !important;
+  }
+}
+.el-table--large {
+  .el-table__header th {
+    height: 50px !important;
+    font-size: 16px !important;
+  }
+  .el-table__row {
+    height: 50px !important;
+    font-size: 15px !important;
+  }
+}
+
+/* el-drawer */
+.el-drawer {
+  .el-drawer__header {
+    padding: 16px 20px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+    span {
+      font-size: 17px;
+      line-height: 17px;
+      color: var(--el-text-color-primary) !important;
+    }
+  }
+  .el-drawer__footer {
+    border-top: 1px solid var(--el-border-color-lighter);
+  }
+
+  // Full-width select in drawer
+  .el-select {
+    width: 100%;
+  }
+
+  // Two-column form layout in drawer
+  .drawer-multiColumn-form {
+    display: flex;
+    flex-wrap: wrap;
+    .el-form-item {
+      width: 47%;
+      &:nth-child(2n-1) {
+        margin-right: 5%;
+      }
+    }
+  }
+}
+
+/* el-dialog */
+.el-dialog {
+  padding: 0;
+  .el-dialog__header {
+    padding: 15px 20px;
+    margin: 0;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+    .el-dialog__title {
+      font-size: 17px;
+    }
+  }
+  .el-dialog__body,
+  .el-dialog__footer {
+    padding: 15px 20px;
+  }
+}

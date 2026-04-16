@@ -1,0 +1,112 @@
+---
+# PostgreSQL + TimescaleDB Deployment
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opspilot-postgres-pvc
+  namespace: opspilot
+  labels:
+    app: opspilot
+    tier: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opspilot-postgres
+  namespace: opspilot
+  labels:
+    app: opspilot
+    tier: database
+spec:
+  serviceName: opspilot-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opspilot
+      tier: database
+  template:
+    metadata:
+      labels:
+        app: opspilot
+        tier: database
+    spec:
+      containers:
+        - name: postgres
+          image: timescale/timescaledb:latest-pg15
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: opspilot
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: opspilot-config
+                  key: DATABASE_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opspilot-secrets
+                  key: DATABASE_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(DATABASE_USER)
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(DATABASE_USER)
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: opspilot-postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opspilot-postgres
+  namespace: opspilot
+  labels:
+    app: opspilot
+    tier: database
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: opspilot
+    tier: database
+  type: ClusterIP

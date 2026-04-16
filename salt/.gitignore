@@ -1,0 +1,42 @@
+# Salt
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Pillar (contains secrets)
+pillar/secret.sls
+pillar/environments/*/secret.sls
+pillar/**/*secret*
+
+# Salt cache
+.salt/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Encrypted files (keep decrypted versions out of git)
+*.asc
+*.gpg
