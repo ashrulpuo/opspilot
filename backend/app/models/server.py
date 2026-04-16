@@ -1,6 +1,6 @@
 """Server models."""
 from datetime import datetime
-from sqlalchemy import Column, DateTime, ForeignKey, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -19,6 +19,12 @@ class Server(Base):
     web_server_type = Column(String)  # 'nginx', 'apache', 'caddy', 'none'
     domain_name = Column(String)
     status = Column(String, nullable=False, default="active")  # 'active', 'inactive', 'error'
+    agent_api_key_hash = Column(String, nullable=True, index=True)
+    agent_last_seen_at = Column(DateTime, nullable=True)
+    # OpsPilot-initiated SSH (password stored Fernet-encrypted; never expose via public API)
+    ssh_username = Column(String, nullable=True)
+    ssh_port = Column(Integer, nullable=True)
+    ssh_password_encrypted = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -27,6 +33,11 @@ class Server(Base):
     credentials = relationship("CredentialsVaultPath", back_populates="server", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="server", cascade="all, delete-orphan")
     ssh_sessions = relationship("SSHSesion", back_populates="server", cascade="all, delete-orphan")
+    metrics_push_samples = relationship(
+        "ServerMetricsPushSample",
+        back_populates="server",
+        cascade="all, delete-orphan",
+    )
 
 
 class CredentialsVaultPath(Base):

@@ -1,50 +1,47 @@
 ---
-name: ✨ Feature Request
-about: 建议一个新功能
+name: Feature request
+about: Suggest a feature
 title: '[FEATURE] '
 labels: ['enhancement', 'needs-triage']
 assignees: ''
 ---
 
-## ✨ 功能描述
+## Summary
 
-<!-- 请简要描述你想要的功能 -->
+<!-- What you want to build or change -->
 
-## 🔍 环境信息
+## Environment (if relevant)
 
-<!-- 请填写以下信息 -->
-
-### 操作系统
+### Operating system
 
 - [ ] Windows
 - [ ] macOS
 - [ ] Linux
-- [ ] 于操作系统无关
+- [ ] Not OS-specific
 
-### 浏览器版本
+### Browser
 
-- [ ] Chrome **<Version>**
-- [ ] Firefox **<Version>**
-- [ ] Safari **<Version>**
-- [ ] Edge **<Version>**
-- [ ] 于浏览器无关
+- [ ] Chrome **version**
+- [ ] Firefox **version**
+- [ ] Safari **version**
+- [ ] Edge **version**
+- [ ] Not browser-specific
 
-### 仓库代码版本
+### Code version
 
-- [ ] 最新主分支代码
-- [ ] 特定版本: **\_**
+- [ ] Latest default branch
+- [ ] Specific version: **\_**
 
-## 💡 解决方案
+## Proposed solution
 
-<!-- 描述你建议的解决方案 -->
+<!-- How you would implement it (optional) -->
 
-## 📦 其他信息
+## Additional context
 
-<!-- 添加任何其他上下文或截图 -->
+<!-- Mockups, links, etc. -->
 
-## ✅ 检查清单
+## Checklist
 
-- [ ] 我已经搜索了现有的 issues，确认这是一个新需求
-- [ ] 我已经提供了完整的环境信息
-- [ ] 我已经描述了问题和解决方案
-- [ ] 我已经考虑了替代方案
+- [ ] I searched existing issues
+- [ ] I described the problem and proposed approach
+- [ ] I considered alternatives

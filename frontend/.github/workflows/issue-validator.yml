@@ -3,12 +3,11 @@ name: Issue Validator
 on:
   issues:
     types: [opened]
-  # 添加并发控制，避免重复运行
+
 concurrency:
   group: 'issue-validator-${{ github.event.issue.number }}'
   cancel-in-progress: true
 
-# 添加必要的权限
 permissions:
   contents: read
   issues: write
@@ -28,70 +27,65 @@ jobs:
             const issue = context.payload.issue;
             const body = issue.body || '';
 
-            console.log('🔍 开始验证 Issue 格式...');
-            console.log(`Issue 标题: ${issue.title}`);
-            console.log(`Issue 描述长度: ${body.length}`);
+            console.log('Validating issue format...');
+            console.log(`Title: ${issue.title}`);
+            console.log(`Body length: ${body.length}`);
 
             let validationErrors = [];
             let debugInfo = [];
 
-            // 检查是否包含必要的环境信息
-            const hasOS = body.includes('### 操作系统') && body.includes('- [ ]');
-            const hasBrowser = body.includes('### 浏览器版本') && body.includes('- [ ]');
-            const hasVersion = body.includes('### 仓库代码版本') && body.includes('- [ ]');
+            const hasOS = body.includes('### Operating system') && body.includes('- [ ]');
+            const hasBrowser = body.includes('### Browser') && body.includes('- [ ]');
+            const hasVersion = body.includes('### Code version') && body.includes('- [ ]');
 
-            // 检查是否包含重现步骤或功能描述（仅在 bug 类型时检查）
-            const isBug = issue.labels.some(label => 
+            const isBug = issue.labels.some(label =>
               typeof label === 'string' ? label === 'bug' : label.name === 'bug'
             );
-            const hasSteps = body.includes('## 📋 重现步骤') || body.includes('## 🎯 问题描述');
+            const hasSteps = body.includes('## Steps to reproduce') || body.includes('## Description');
 
-            // 检查是否包含检查清单
-            const hasChecklist = body.includes('## ✅ 检查清单') && body.includes('- [ ]');
+            const hasChecklist = body.includes('## Checklist') && body.includes('- [ ]');
 
             if (!hasOS) {
-              validationErrors.push('❌ **缺少操作系统信息**');
-              debugInfo.push('未找到操作系统选择项（需要包含 "### 操作系统" 和 "- [ ]" 格式）');
+              validationErrors.push('Missing operating system section');
+              debugInfo.push('Need ### Operating system with checkboxes');
             } else {
-              console.log('✅ 操作系统检查通过');
+              console.log('OS section OK');
             }
 
             if (!hasBrowser) {
-              validationErrors.push('❌ **缺少浏览器版本信息**');
-              debugInfo.push('未找到浏览器版本填写项（需要包含 "### 浏览器版本" 和 "- [ ]" 格式）');
+              validationErrors.push('Missing browser section');
+              debugInfo.push('Need ### Browser with checkboxes');
             } else {
-              console.log('✅ 浏览器版本检查通过');
+              console.log('Browser section OK');
             }
 
             if (!hasVersion) {
-              validationErrors.push('❌ **缺少仓库代码版本确认**');
-              debugInfo.push('未找到仓库代码版本确认项（需要包含 "### 仓库代码版本" 和 "- [ ]" 格式）');
+              validationErrors.push('Missing code version section');
+              debugInfo.push('Need ### Code version with checkboxes');
             } else {
-              console.log('✅ 仓库代码版本检查通过');
+              console.log('Version section OK');
             }
 
-            // 只在 bug 类型时检查重现步骤
             if (isBug && !hasSteps) {
-              validationErrors.push('❌ **缺少重现步骤或问题描述**');
-              debugInfo.push('未找到重现步骤或问题描述（需要包含 "## 📋 重现步骤" 或 "## 🎯 问题描述"）');
+              validationErrors.push('Bug reports need Steps to reproduce or Description');
+              debugInfo.push('Need ## Steps to reproduce or ## Description');
             } else if (isBug) {
-              console.log('✅ 重现步骤检查通过');
+              console.log('Reproduction section OK');
             } else {
-              console.log('ℹ️ 非 bug 类型，跳过重现步骤检查');
+              console.log('Skipping reproduction (not labeled bug)');
             }
 
             if (!hasChecklist) {
-              validationErrors.push('❌ **缺少检查清单**');
-              debugInfo.push('未找到检查清单（需要包含 "## ✅ 检查清单" 和 "- [ ]" 格式）');
+              validationErrors.push('Missing checklist');
+              debugInfo.push('Need ## Checklist with checkboxes');
             } else {
-              console.log('✅ 检查清单检查通过');
+              console.log('Checklist OK');
             }
 
             if (validationErrors.length > 0) {
-              console.log('❌ Issue 格式验证失败');
-              console.log('错误详情:', validationErrors);
-              
-              // 添加标签（首次只添加 needs-info）
+              console.log('Issue validation failed');
+              console.log('Errors:', validationErrors);
+
               try {
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
@@ -99,14 +93,13 @@ jobs:
                   issue_number: issue.number,
                   labels: ['needs-info']
                 });
-                console.log('✅ 已添加 needs-info 标签');
+                console.log('Added needs-info');
               } catch (e) {
-                console.log('⚠️ 添加标签失败:', e.message);
+                console.log('Label error:', e.message);
               }
-              
-              // 添加详细评论
-              const commentBody = `⚠️ **Issue 格式验证失败**\n\n### ❌ 发现的问题：\n\n${validationErrors.join('\n\n')}\n\n### ⚠️ 重要提醒\n- 不符合格式要求的 Issue 将在 24 小时后自动关闭\n- 请使用提供的模板创建 Issue\n\n请完善信息后重新提交，谢谢！`;
-              
+
+              const commentBody = `**Issue format validation failed**\n\n### Issues\n\n${validationErrors.join('\n\n')}\n\nPlease use the issue template.`;
+
               try {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
@@ -114,16 +107,15 @@ jobs:
                   issue_number: issue.number,
                   body: commentBody
                 });
-                console.log('✅ 已添加详细评论');
+                console.log('Posted comment');
               } catch (e) {
-                console.log('⚠️ 添加评论失败:', e.message);
+                console.log('Comment error:', e.message);
               }
-              
+
               core.setFailed(`Issue format validation failed: ${validationErrors.join(', ')}`);
             } else {
-              console.log('✅ Issue 格式验证通过');
-              
-              // 移除 invalid 和 needs-info 标签（如果存在）
+              console.log('Issue validation passed');
+
               const labelsToRemove = ['invalid', 'needs-info'];
               for (const label of labelsToRemove) {
                 try {
@@ -133,14 +125,12 @@ jobs:
                     issue_number: issue.number,
                     name: label
                   });
-                  console.log(`✅ 已移除 ${label} 标签`);
+                  console.log(`Removed label ${label}`);
                 } catch (e) {
-                  // 标签不存在，忽略错误
-                  console.log(`ℹ️ ${label} 标签不存在，无需移除`);
+                  console.log(`Label ${label} not present`);
                 }
               }
-              
-              // 如果 issue 之前被关闭了，重新打开
+
               if (issue.state === 'closed') {
                 try {
                   await github.rest.issues.update({
@@ -149,11 +139,11 @@ jobs:
                     issue_number: issue.number,
                     state: 'open'
                   });
-                  console.log('✅ 已重新打开 Issue');
+                  console.log('Reopened issue');
                 } catch (e) {
-                  console.log('⚠️ 重新打开 Issue 失败:', e.message);
+                  console.log('Reopen error:', e.message);
                 }
               }
-              
-              console.log(`✅ **Issue 格式验证通过！**\n\n所有格式要求都已满足，Issue 已准备就绪。`);
+
+              console.log('Issue is ready.');
             }

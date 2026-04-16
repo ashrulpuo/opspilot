@@ -9,8 +9,32 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.server import Server
 from app.models.organization import Organization, OrganizationMember
+from app.models.metrics import Metric
+from app.models.alert import Alert
 
 router = APIRouter()
+
+
+async def _latest_metric_values(db: AsyncSession, server_id: str) -> Dict[str, float]:
+    """Most recent value per metric_name for a server (time-series `Metric` rows)."""
+    result = await db.execute(
+        select(Metric.metric_name, Metric.metric_value, Metric.timestamp)
+        .where(Metric.server_id == server_id)
+        .order_by(Metric.timestamp.desc())
+        .limit(500)
+    )
+    latest: Dict[str, float] = {}
+    for name, value, _ts in result.all():
+        if name not in latest:
+            latest[name] = float(value or 0.0)
+    return latest
+
+
+def _metric_float(metrics: Dict[str, float], *names: str) -> float:
+    for n in names:
+        if n in metrics:
+            return float(metrics[n])
+    return 0.0
 
 
 # Response Schemas
@@ -155,48 +179,21 @@ async def get_server_health(
     servers_result = await db.execute(servers_query)
     servers = servers_result.scalars().all()
 
-    # Import Metrics model
-    from app.models.metrics import Metrics
-
-    # Build health overview with latest metrics
-    health_overview = []
+    health_overview: List[ServerHealthOverview] = []
     for server in servers:
-        # Get latest metrics for this server
-        metrics_query = (
-            select(Metrics)
-            .where(Metrics.server_id == server.id)
-            .order_by(Metrics.timestamp.desc())
-            .limit(1)
+        by_name = await _latest_metric_values(db, server.id)
+        health_overview.append(
+            ServerHealthOverview(
+                server_id=server.id,
+                server_name=server.hostname,
+                status=server.status,
+                cpu_usage=_metric_float(by_name, "cpu_usage", "cpu_percent"),
+                memory_usage=_metric_float(by_name, "memory_usage", "memory_percent"),
+                disk_usage=_metric_float(by_name, "disk_usage", "disk_usage_percent"),
+                uptime=int(_metric_float(by_name, "uptime_seconds")),
+                last_seen=server.updated_at.isoformat(),
+            )
         )
-        metrics_result = await db.execute(metrics_query)
-        latest_metrics = metrics_result.scalar_one_or_none()
-
-        if latest_metrics:
-            health_overview.append(
-                ServerHealthOverview(
-                    server_id=server.id,
-                    server_name=server.hostname,
-                    status=server.status,
-                    cpu_usage=latest_metrics.cpu_usage_percent or 0.0,
-                    memory_usage=latest_metrics.memory_usage_percent or 0.0,
-                    disk_usage=latest_metrics.disk_usage_percent or 0.0,
-                    uptime=latest_metrics.uptime_seconds or 0,
-                    last_seen=server.updated_at.isoformat(),
-                )
-            )
-        else:
-            health_overview.append(
-                ServerHealthOverview(
-                    server_id=server.id,
-                    server_name=server.hostname,
-                    status=server.status,
-                    cpu_usage=0.0,
-                    memory_usage=0.0,
-                    disk_usage=0.0,
-                    uptime=0,
-                    last_seen=server.updated_at.isoformat(),
-                )
-            )
 
     return health_overview
 
@@ -227,16 +224,12 @@ async def get_recent_alerts(
     )
     org_ids = [row[0] for row in org_result.fetchall()]
 
-    # Import Alert model
-    from app.models.alert import Alert
-
-    # Get recent alerts
     alerts_query = (
         select(Alert, Server.hostname)
-        .join(Server, Alert.server_id == Server.id)
+        .outerjoin(Server, Alert.server_id == Server.id)
         .where(
             Alert.organization_id.in_(org_ids) if org_ids else False,
-            Alert.resolved == False,  # Only unresolved alerts
+            Alert.status != "resolved",
         )
         .order_by(Alert.created_at.desc())
         .limit(limit)
@@ -244,22 +237,18 @@ async def get_recent_alerts(
     alerts_result = await db.execute(alerts_query)
     alerts = alerts_result.fetchall()
 
-    # Build recent alerts list
-    recent_alerts = []
+    recent_alerts: List[RecentAlert] = []
     for alert, hostname in alerts:
+        label = (alert.type or "alert").replace("_", " ").title()
         recent_alerts.append(
             RecentAlert(
                 id=alert.id,
-                server_name=hostname,
-                severity=alert.severity,
-                title=alert.title,
-                message=alert.message,
+                server_name=hostname or "Unknown server",
+                severity=alert.type or "info",
+                title=f"{label}",
+                message=f"Value {alert.value} (threshold {alert.threshold}) — status {alert.status}",
                 created_at=alert.created_at.isoformat(),
             )
         )
 
     return recent_alerts
-
-
-# Import BaseModel
-from pydantic import BaseModel

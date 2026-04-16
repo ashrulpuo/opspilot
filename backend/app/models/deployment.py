@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Text, Boolean, Integer, ForeignKey, JSON,
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base
+from app.core.database import Base
 
 
 class Log(Base):

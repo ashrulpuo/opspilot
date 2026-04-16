@@ -8,7 +8,7 @@
   <div v-waterMarker="{text:'All rights reserved',textColor:'rgba(180, 180, 180, 0.4)'}"></div>
 */
 
-import type { Directive, DirectiveBinding } from 'vue'
+import type { DirectiveBinding } from 'vue'
 const addWaterMarker = (str: string, parentNode: HTMLElement, font: any, textColor: string) => {
   // str, parent, font, textColor
   const can: HTMLCanvasElement = document.createElement('canvas')

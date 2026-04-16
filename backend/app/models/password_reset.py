@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 import uuid
 
-from app.models.base import Base
+from app.core.database import Base
 
 
 class PasswordReset(Base):

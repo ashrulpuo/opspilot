@@ -7,7 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import piniaPersistConfig from '@/stores/helper/persist'
 import { AuthAPI } from '@/api/opspilot/auth'
-import type { User, LoginRequest, RegisterRequest } from '@/api/opspilot/types'
+import type { User, LoginRequest, RegisterRequest, BootstrapRequest } from '@/api/opspilot/types'
 
 // ============================================
 // Auth Store
@@ -20,6 +20,8 @@ export const useOpsPilotAuthStore = defineStore(
     const refreshToken = ref<string>('')
     const user = ref<User | null>(null)
     const isAuthenticated = ref<boolean>(false)
+    /** null = not yet loaded from API */
+    const setupRequired = ref<boolean | null>(null)
 
     const isAuth = computed(() => isAuthenticated.value && !!accessToken.value)
 
@@ -35,6 +37,7 @@ export const useOpsPilotAuthStore = defineStore(
       refreshToken.value = ''
       user.value = null
       isAuthenticated.value = false
+      setupRequired.value = null
     }
 
     const updateToken = (token: string) => {
@@ -51,7 +54,7 @@ export const useOpsPilotAuthStore = defineStore(
       const response = await AuthAPI.login(credentials)
       // Set token first so getCurrentUser() has auth
       accessToken.value = response.access_token
-      refreshToken.value = response.refresh_token
+      refreshToken.value = response.refresh_token ?? ''
       isAuthenticated.value = true
       // Now get user info with the token
       try {
@@ -87,12 +90,43 @@ export const useOpsPilotAuthStore = defineStore(
       }
     }
 
+    const loadSetupRequired = async (): Promise<boolean> => {
+      const res = await AuthAPI.getSetupRequired()
+      setupRequired.value = res.setup_required
+      return res.setup_required
+    }
+
+    const bootstrapFirstAdmin = async (data: BootstrapRequest) => {
+      const response = await AuthAPI.bootstrap(data)
+      accessToken.value = response.access_token
+      refreshToken.value = response.refresh_token ?? ''
+      isAuthenticated.value = true
+      setupRequired.value = false
+      try {
+        const userInfo = await AuthAPI.getCurrentUser()
+        user.value = userInfo
+      } catch (error) {
+        console.error('Failed to get user info after bootstrap:', error)
+        if (response.user) {
+          user.value = {
+            id: response.user.id,
+            email: response.user.email,
+            full_name: response.user.full_name,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
+        }
+      }
+      return response
+    }
+
     return {
       accessToken,
       refreshToken,
       user,
       isAuthenticated,
       isAuth,
+      setupRequired,
       setAuth,
       clearAuth,
       updateToken,
@@ -101,11 +135,18 @@ export const useOpsPilotAuthStore = defineStore(
       register,
       logout,
       refreshUser,
-      hasCompletedOnboarding,
+      loadSetupRequired,
+      bootstrapFirstAdmin,
     }
   },
   {
-    persist: piniaPersistConfig('opspilot-auth'),
+    // Do not persist setupRequired — always resolved from GET /auth/setup-required on load.
+    persist: piniaPersistConfig('opspilot-auth', [
+      'accessToken',
+      'refreshToken',
+      'user',
+      'isAuthenticated',
+    ]),
   }
 )
 
@@ -147,10 +188,11 @@ export const useOpsPilotOrganizationStore = defineStore(
     const createOrganization = async (data: { name: string; slug: string; description?: string }) => {
       const org = await OrganizationsAPI.create(data)
       organizations.value.push(org)
+      currentOrganization.value = org
       return org
     }
 
-    const updateOrganization = async (id: string, data: { name?: string; description?: string }) => {
+    const updateOrganization = async (id: string, data: { name?: string; slug?: string; description?: string }) => {
       const org = await OrganizationsAPI.update(id, data)
       const index = organizations.value.findIndex(o => o.id === id)
       if (index !== -1) {
@@ -201,7 +243,7 @@ export const useOpsPilotOrganizationStore = defineStore(
 // ============================================
 
 import { ServersAPI } from '@/api/opspilot/servers'
-import type { Server } from '@/api/opspilot/types'
+import type { CreateServerRequest, Server } from '@/api/opspilot/types'
 
 export const useOpsPilotServerStore = defineStore(
   'opspilot-server',
@@ -210,15 +252,22 @@ export const useOpsPilotServerStore = defineStore(
     const currentServer = ref<Server | null>(null)
     const loading = ref<boolean>(false)
 
-    const onlineServers = computed(() => servers.value.filter(s => s.status === 'online'))
-    const offlineServers = computed(() => servers.value.filter(s => s.status !== 'online'))
+    const onlineServers = computed(() =>
+      servers.value.filter(s => s.status === 'online' || s.status === 'active'),
+    )
+    const offlineServers = computed(() =>
+      servers.value.filter(s => s.status !== 'online' && s.status !== 'active'),
+    )
 
     const fetchServers = async (organizationId?: string) => {
       loading.value = true
       try {
-        const params = organizationId ? { organization_id: organizationId } : undefined
-        const response = await ServersAPI.list(params)
-        servers.value = response.items
+        if (!organizationId) {
+          servers.value = []
+          return
+        }
+        const response = await ServersAPI.list(organizationId)
+        servers.value = response.servers
       } finally {
         loading.value = false
       }
@@ -228,16 +277,8 @@ export const useOpsPilotServerStore = defineStore(
       currentServer.value = server
     }
 
-    const createServer = async (data: {
-      name: string
-      hostname: string
-      ip_address: string
-      port: number
-      ssh_port: number
-      os_type: 'linux' | 'macos' | 'windows'
-      tags?: string[]
-    }) => {
-      const server = await ServersAPI.create(data)
+    const createServer = async (organizationId: string, data: CreateServerRequest) => {
+      const server = await ServersAPI.create(organizationId, data)
       servers.value.push(server)
       return server
     }

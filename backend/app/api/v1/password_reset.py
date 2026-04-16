@@ -69,10 +69,10 @@ async def forgot_password(
     
     # Create password reset record
     password_reset = PasswordReset(
-        id=token,
         user_id=user.id,
+        token=token,
         expires_at=datetime.utcnow() + timedelta(minutes=15),
-        used=False
+        used=False,
     )
     db.add(password_reset)
     await db.commit()
@@ -80,11 +80,10 @@ async def forgot_password(
     # Send email with reset link
     reset_link = f"https://app.opspilot.com/reset-password?token={token}"
     
-    success = email_service.send_password_reset_email(
-        to_emails=[user.email],
+    email_service.send_password_reset_email(
+        to_email=user.email,
         user_name=user.full_name,
-        reset_link=reset_link,
-        expires_at=password_reset.expires_at.isoformat()
+        reset_url=reset_link,
     )
     
     return {"message": "If an account with this email exists, you will receive a reset link shortly."}
@@ -99,7 +98,7 @@ async def reset_password(
     
     # Find password reset token
     result = await db.execute(
-        select(PasswordReset).where(PasswordReset.id == request.token)
+        select(PasswordReset).where(PasswordReset.token == request.token)
     )
     password_reset = result.scalar_one_or_none()
     
@@ -135,7 +134,7 @@ async def reset_password(
         )
     
     # Update password
-    user.hashed_password = get_password_hash(request.new_password)
+    user.password_hash = get_password_hash(request.new_password)
     
     # Mark token as used
     password_reset.used = True

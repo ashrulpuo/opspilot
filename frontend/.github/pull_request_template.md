@@ -15,7 +15,7 @@
 
 <!-- Link the issue, e.g. #123 -->
 
-**Related Issue:** #\_
+**Related Issue:** #_____
 
 ## Summary
 

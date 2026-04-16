@@ -87,3 +87,17 @@ A high-order component wrapping `el-table` that integrates search, pagination, a
 - `search()`: Trigger search (resets to page 1).
 - `reset()`: Reset search form and reload.
 - `element`: Access to underlying `el-table` ref.
+
+## OpsPilot local dev (restart reminders)
+
+- After changing **`backend/.env`** (e.g. `allowed_origins`, `database_url`, `redis_url`), **restart the FastAPI process** so settings reload.
+- After changing **`frontend/.env.*`** or any **`VITE_*`** variable, **restart the Vite dev server** (`pnpm dev`).
+- CORS: the UI origin must match what is listed in `allowed_origins` (both `http://localhost:8848` and `http://127.0.0.1:8848` when using that port).
+
+### If `POST /api/v1/auth/bootstrap` returns **404**
+
+404 means the HTTP server on that port is **not** serving OpsPilot routes (CORS would block the response without a normal 404 from FastAPI in many cases).
+
+1. From repo: `bash backend/scripts/verify_api.sh 127.0.0.1 8000` — must show JSON with `"service":"opspilot-api"`.
+2. **Port conflict:** `docker-compose.salt.yml` maps **Salt CherryPy API to host port 8000**. If Salt is running, either stop it or run OpsPilot on another port, e.g. `uvicorn app.main:app --host 127.0.0.1 --port 8001` and set **`VITE_API_URL=http://127.0.0.1:8001`** in the frontend env, then restart Vite.
+3. Start the API from the **`backend/`** directory: `uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`.

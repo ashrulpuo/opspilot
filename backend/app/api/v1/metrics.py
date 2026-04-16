@@ -1,12 +1,16 @@
 """Metrics API endpoints for OpsPilot."""
-from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Any, Dict, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.agent_keys import verify_agent_api_key
+from app.models.server import Server
 from app.services.server_service import server_service
+from app.services import metrics_push_service
 
 router = APIRouter()
 
@@ -40,43 +44,22 @@ async def ingest_metrics(
     server_id: str,
     request: MetricsIngestRequest,
     db: AsyncSession = Depends(get_db),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
 ):
-    """Ingest metrics from OpsPilot agent (Salt minion).
-
-    This endpoint is called by OpsPilot agents (via Salt) to send metrics.
-    The API key should be set in the Salt pillar and validated.
-
-    Args:
-        server_id: Server ID
-        request: Metrics data
-        db: Database session
-
-    Returns:
-        Confirmation message
-
-    Raises:
-        HTTPException: If server not found or invalid API key
-    """
-    # Validate server_id matches request
+    """Ingest metrics from OpsPilot host agent (push). Requires per-server X-API-Key."""
     if server_id != request.server_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Server ID in URL does not match request body",
         )
 
-    # TODO: Validate API key from request headers (X-API-Key)
-    # For now, we skip API key validation for development
+    if not x_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing X-API-Key header",
+        )
 
-    # TODO: Store metrics in database (TimescaleDB hypertable)
-    # We'll implement this in the metrics repository
-
-    # Log metrics
-    from app.models.server import Server
-    from sqlalchemy import select
-
-    result = await db.execute(
-        select(Server).where(Server.id == server_id)
-    )
+    result = await db.execute(select(Server).where(Server.id == server_id))
     server = result.scalar_one_or_none()
 
     if not server:
@@ -85,8 +68,27 @@ async def ingest_metrics(
             detail="Server not found",
         )
 
-    # TODO: Store metrics in TimescaleDB
-    # metrics_repo.store_metrics(server_id, request.metrics)
+    if not server.agent_api_key_hash:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Server has no agent API key registered",
+        )
+
+    if not verify_agent_api_key(x_api_key, server.agent_api_key_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
+
+    if server.organization_id != request.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="organization_id does not match this server",
+        )
+
+    await metrics_push_service.insert_push_sample(db, server_id=server_id, payload=request.metrics)
+    await metrics_push_service.mark_agent_seen(db, server)
+    await db.commit()
 
     return MetricsIngestResponse(
         message="Metrics received successfully",
@@ -100,23 +102,11 @@ async def get_server_metrics(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Get latest metrics for a server.
-
-    Args:
-        server_id: Server ID
-        db: Database session
-        current_user: Current authenticated user
-
-    Returns:
-        Latest metrics for server
-
-    Raises:
-        HTTPException: If server not found or no permission
-    """
+    """Get latest metrics for a server (prefers fresh push-agent samples, else Salt)."""
     user_id = current_user["id"]
 
     try:
-        metrics = await server_service.collect_metrics(db, server_id, user_id)
+        metrics = await server_service.get_metrics_for_dashboard(db, server_id, user_id)
         return MetricsResponse(server_id=server_id, metrics=metrics)
     except ValueError as e:
         raise HTTPException(
@@ -132,23 +122,9 @@ async def get_server_metrics_history(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Get historical metrics for a server.
-
-    Args:
-        server_id: Server ID
-        hours: Number of hours of history to retrieve (default: 24)
-        db: Database session
-        current_user: Current authenticated user
-
-    Returns:
-        Historical metrics for server
-
-    Raises:
-        HTTPException: If server not found or no permission
-    """
+    """Get historical metrics for a server."""
     user_id = current_user["id"]
 
-    # Check server permission
     try:
         server = await server_service.get_server(db, server_id, user_id)
         if not server:
@@ -162,14 +138,10 @@ async def get_server_metrics_history(
             detail="No permission to access this server",
         )
 
-    # TODO: Retrieve historical metrics from TimescaleDB
-    # metrics_history = metrics_repo.get_metrics_history(server_id, hours)
-
     return {
         "server_id": server_id,
         "hours": hours,
         "message": "Historical metrics retrieval not yet implemented",
-        # "metrics": metrics_history
     }
 
 
@@ -179,23 +151,8 @@ async def get_organization_metrics_summary(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Get metrics summary for all servers in an organization.
-
-    Args:
-        organization_id: Organization ID
-        db: Database session
-        current_user: Current authenticated user
-
-    Returns:
-        Metrics summary for organization
-
-    Raises:
-        HTTPException: If no permission to access organization
-    """
+    """Get metrics summary for all servers in an organization."""
     user_id = current_user["id"]
-
-    # TODO: Get all servers in organization and aggregate metrics
-    # servers = await server_service.list_servers(db, organization_id, user_id)
 
     return {
         "organization_id": organization_id,

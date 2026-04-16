@@ -1,4 +1,10 @@
-"""API v1 router."""
+"""API v1 router.
+
+Router gap audit (modules exist under app.api.v1 but are not include_router'd here):
+alerts, commands, credentials, deployments, logs, salt, security_scan (see repo tree).
+Mounted: health, auth, password_reset, servers, organizations, metrics, backups,
+health_checks, ssh, dashboard.
+"""
 from fastapi import APIRouter
 
 # Import all API modules
@@ -21,4 +27,4 @@ api_router.include_router(metrics.router, tags=["Metrics"])
 api_router.include_router(backups.router, tags=["Backups"])
 api_router.include_router(health_checks.router, tags=["Health Checks"])
 api_router.include_router(ssh.router, tags=["SSH"])
-api_router.include_router(dashboard.router, tags=["Dashboard"])
+api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])

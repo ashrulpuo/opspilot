@@ -36,4 +36,5 @@ Object.keys(Icons).forEach(key => {
   app.component(key, Icons[key as keyof typeof Icons])
 })
 
-app.use(ElementPlus).use(directives).use(router).use(I18n).use(pinia).mount('#app')
+// Pinia must be installed before Vue Router — guards call useOpsPilotAuthStore().
+app.use(ElementPlus).use(directives).use(pinia).use(I18n).use(router).mount('#app')

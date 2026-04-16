@@ -3,17 +3,38 @@
  * Authentication endpoints
  */
 
-import request from '../opspilot/client'
+import request from './client'
+import type { CustomAxiosRequestConfig } from './client'
 import type {
   LoginRequest,
   RegisterRequest,
+  BootstrapRequest,
   ForgotPasswordRequest,
   ResetPasswordRequest,
   LoginResponse,
+  SetupRequiredResponse,
   User,
 } from './types'
 
 export const AuthAPI = {
+  /**
+   * True when there are no users yet (show initial setup wizard).
+   */
+  getSetupRequired: (): Promise<SetupRequiredResponse> => {
+    return request.get<SetupRequiredResponse>('/auth/setup-required', {
+      skipAuth: true,
+    } as CustomAxiosRequestConfig)
+  },
+
+  /**
+   * Create first admin (only when database has zero users).
+   */
+  bootstrap: (data: BootstrapRequest): Promise<LoginResponse> => {
+    return request.post<LoginResponse>('/auth/bootstrap', data, {
+      skipAuth: true,
+    } as CustomAxiosRequestConfig)
+  },
+
   /**
    * User login
    */

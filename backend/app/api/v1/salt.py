@@ -1,7 +1,7 @@
 """Salt API endpoints for OpsPilot.
 Handles incoming data from Salt runners (metrics, backups, health, logs).
 """
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from app.models.alert import Alert
 from sqlalchemy import select, func
 from datetime import datetime, timedelta
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -131,28 +132,38 @@ async def ingest_metrics(
             detail="Server not found",
         )
 
-    # Extract metrics
     metrics_data = request.metrics
-    metrics = Metrics(
-        server_id=request.server_id,
-        timestamp=datetime.utcnow(),
-        cpu_usage_percent=metrics_data.get("cpu_percent", 0),
-        cpu_count=metrics_data.get("cpu_count", 0),
-        memory_usage_percent=metrics_data.get("memory_percent", 0),
-        memory_used_gb=metrics_data.get("memory_used_gb", 0),
-        memory_total_gb=metrics_data.get("memory_total_gb", 0),
-        disk_usage_percent=metrics_data.get("disk_usage_percent", 0),
-        disk_used_gb=metrics_data.get("disk_used_gb", 0),
-        disk_total_gb=metrics_data.get("disk_total_gb", 0),
-        network_in_bps=metrics_data.get("network_in_bps", 0),
-        network_out_bps=metrics_data.get("network_out_bps", 0),
-        uptime_seconds=metrics_data.get("uptime_seconds", 0),
-    )
+    now = datetime.utcnow()
+    metric_rows: List[Tuple[str, Any, Optional[str]]] = [
+        ("cpu_percent", metrics_data.get("cpu_percent", 0), "%"),
+        ("cpu_count", metrics_data.get("cpu_count", 0), None),
+        ("memory_percent", metrics_data.get("memory_percent", 0), "%"),
+        ("memory_used_gb", metrics_data.get("memory_used_gb", 0), "GB"),
+        ("memory_total_gb", metrics_data.get("memory_total_gb", 0), "GB"),
+        ("disk_usage_percent", metrics_data.get("disk_usage_percent", 0), "%"),
+        ("disk_used_gb", metrics_data.get("disk_used_gb", 0), "GB"),
+        ("disk_total_gb", metrics_data.get("disk_total_gb", 0), "GB"),
+        ("network_in_bps", metrics_data.get("network_in_bps", 0), "bps"),
+        ("network_out_bps", metrics_data.get("network_out_bps", 0), "bps"),
+        ("uptime_seconds", metrics_data.get("uptime_seconds", 0), "seconds"),
+    ]
+    for name, raw_val, unit in metric_rows:
+        try:
+            val = float(raw_val)
+        except (TypeError, ValueError):
+            val = 0.0
+        db.add(
+            Metric(
+                id=str(uuid.uuid4()),
+                server_id=request.server_id,
+                timestamp=now,
+                metric_name=name,
+                metric_value=val,
+                unit=unit,
+            )
+        )
 
-    db.add(metrics)
-
-    # Update server last_seen and status
-    server.last_seen = datetime.utcnow()
+    server.updated_at = datetime.utcnow()
     server.status = "online"
 
     # Check for alerts based on thresholds
@@ -347,11 +358,8 @@ async def check_alert_thresholds(
             db,
             server=server,
             alert_type="cpu",
-            severity="critical" if cpu_percent > 95 else "warning",
-            title="High CPU Usage",
-            message=f"CPU usage is {cpu_percent}%",
-            value=cpu_percent,
-            threshold=cpu_threshold,
+            value=float(cpu_percent),
+            threshold=float(cpu_threshold),
         )
 
     # Check Memory
@@ -360,11 +368,8 @@ async def check_alert_thresholds(
             db,
             server=server,
             alert_type="memory",
-            severity="critical" if memory_percent > 95 else "warning",
-            title="High Memory Usage",
-            message=f"Memory usage is {memory_percent}%",
-            value=memory_percent,
-            threshold=memory_threshold,
+            value=float(memory_percent),
+            threshold=float(memory_threshold),
         )
 
     # Check Disk
@@ -373,11 +378,8 @@ async def check_alert_thresholds(
             db,
             server=server,
             alert_type="disk",
-            severity="critical" if disk_percent > 95 else "warning",
-            title="High Disk Usage",
-            message=f"Disk usage is {disk_percent}%",
-            value=disk_percent,
-            threshold=disk_threshold,
+            value=float(disk_percent),
+            threshold=float(disk_threshold),
         )
 
 
@@ -385,38 +387,19 @@ async def create_alert(
     db: AsyncSession,
     server: Server,
     alert_type: str,
-    severity: str,
-    title: str,
-    message: str,
-    value: Optional[float] = None,
-    threshold: Optional[float] = None,
-):
-    """Create a new alert.
-
-    Args:
-        db: Database session
-        server: Server instance
-        alert_type: Alert type (cpu, memory, disk, etc.)
-        severity: Alert severity (critical, warning, info)
-        title: Alert title
-        message: Alert message
-        value: Alert value
-        threshold: Alert threshold
-    """
-    import uuid
-
+    value: float,
+    threshold: float,
+) -> None:
+    """Create a new alert row aligned with `app.models.alert.Alert`."""
     alert = Alert(
         id=str(uuid.uuid4()),
         server_id=server.id,
         organization_id=server.organization_id,
         type=alert_type,
-        severity=severity,
-        title=title,
-        message=message,
-        value=value,
         threshold=threshold,
-        resolved=False,
+        value=value,
+        status="open",
     )
 
     db.add(alert)
-    logger.info(f"Alert created for server {server.id}: {title}")
+    logger.info("Alert created for server %s: type=%s value=%s", server.id, alert_type, value)

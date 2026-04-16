@@ -76,9 +76,9 @@
             {{ loading ? 'Signing in...' : 'Sign in' }}
           </el-button>
 
-          <div class="form-footer">
-            <span class="footer-text">Don't have an account?</span>
-            <router-link to="/register" class="register-link">Sign up</router-link>
+          <div class="form-footer setup-hint">
+            <span class="footer-text">New installation?</span>
+            <router-link to="/setup" class="register-link">One-time initial setup</router-link>
           </div>
         </el-form>
       </div>

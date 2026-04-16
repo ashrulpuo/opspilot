@@ -32,27 +32,28 @@ jobs:
         env:
           CONFIG_FILE: .github/release.yml
         run: |
-          # 解析配置文件
+          # Load label -> category title map from release.yml
           declare -A category_map
           while IFS=";" read -r title labels; do
               for label in $labels; do
                   category_map[$label]="$title"
               done
           done < <(yq -o=tsv '.categories[] | [.title, (.labels | join(" "))] | join(";")' $CONFIG_FILE)
-          # 获取版本范围
+          # Commit range between previous tag and current tag
           mapfile -t tags < <(git tag -l --sort=-version:refname)
           current_tag=${tags[0]}
           previous_tag=${tags[1]:-}
           if [[ -z "$previous_tag" ]]; then
               # First release: include all commits
-              echo "首次发布版本: $current_tag"
+              echo "First release tag: $current_tag"
               commits=$(git log --pretty=format:"%s|%h" || true)
+              commit_range="HEAD"
           else
               commit_range="$previous_tag..$current_tag"
-              echo "版本范围: $commit_range"
+              echo "Commit range: $commit_range"
               commits=$(git log --pretty=format:"%s|%h" "$commit_range" || true)
           fi
-          # 生成分类日志
+          # Build categorized changelog
           declare -A log_entries
           while IFS="|" read -r subject hash; do
               # type=$(echo "$subject" | cut -d':' -f1 | tr -d ' ')
@@ -68,15 +69,14 @@ jobs:
               done
               if [[ $found -eq 0 ]]; then
                   entry="- ${subject} (${hash:0:7})"
-                  log_entries["其他"]+="$entry"$'\n'
+                  log_entries["Other"]+="$entry"$'\n'
               fi
           done <<< "$commits"
 
-          # 统计提交数量
+          # Stats
           commit_count=$(git log --oneline "$commit_range" | wc -l)
-          # 统计受影响的文件数量
           file_count=$(git diff --name-only "$commit_range" | wc -l)
-          # 统计贡献者信息
+          # Contributors
           contributor_stats=$(git shortlog -sn "$commit_range")
           contributor_notes=""
           while IFS= read -r line; do
@@ -84,28 +84,23 @@ jobs:
               name=$(echo "$line" | awk '{$1=""; print $0}' | sed 's/^ //')
               contributor_notes+="- ${name} (${commits} commits)\n"
           done <<< "$contributor_stats"
-          # 构建输出内容
-          release_notes="## 版本更新日志 ($current_tag)\n\n"
+          release_notes="## Changelog ($current_tag)\n\n"
           while IFS= read -r category; do
               if [[ -n "${log_entries[$category]}" ]]; then
                   release_notes+="### $category\n${log_entries[$category]}\n"
               fi
           done < <(yq '.categories[].title' $CONFIG_FILE)
           current_date=$(date +"%Y-%m-%d")
-          # 添加发布日期和下载统计信息
-          release_notes+="### 📅 发布日期: ${current_date}\n"
-          # 添加统计信息
-          release_notes+="### 📊 统计信息\n"
-          release_notes+="- 本次发布包含 ${commit_count} 个提交\n"
-          release_notes+="- 影响 ${file_count} 个文件\n\n"
-          # 添加贡献者信息
-          release_notes+="### 👥 贡献者\n"
-          release_notes+="感谢这些优秀的贡献者（按提交次数排序）：\n"
+          release_notes+="### Release date: ${current_date}\n"
+          release_notes+="### Stats\n"
+          release_notes+="- Commits: ${commit_count}\n"
+          release_notes+="- Files changed: ${file_count}\n\n"
+          release_notes+="### Contributors\n"
+          release_notes+="Thank you (by commit count):\n"
           release_notes+="${contributor_notes}\n"
           release_notes+="---\n"
-          # 写入文件
           echo -e "$release_notes" > changelog.md
-          echo "生成日志内容："
+          echo "Changelog:"
           cat changelog.md
       - name: Create Release
         uses: ncipollo/release-action@v1

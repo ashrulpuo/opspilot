@@ -16,8 +16,23 @@ class Settings(BaseSettings):
 
     # API
     API_V1_STR: str = "/api/v1"
+    # Base URL agents use to reach this API (scheme + host + API_V1_STR), e.g. http://api:8000/api/v1
+    PUBLIC_API_BASE_URL: str = "http://127.0.0.1:8000/api/v1"
     PROJECT_NAME: str = "OpsPilot"
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:8848", "http://localhost:5173", "http://localhost:3000"]
+    # Include both localhost and 127.0.0.1 — browsers treat them as different origins for CORS.
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:8848",
+        "http://127.0.0.1:8848",
+        "http://localhost:8858",  # Playwright E2E automation (see scripts/e2e-automation.sh)
+        "http://127.0.0.1:8858",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+    # When False, POST /auth/register is always rejected (first admin only via POST /auth/bootstrap on empty DB).
+    ALLOW_PUBLIC_REGISTRATION: bool = False
 
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"

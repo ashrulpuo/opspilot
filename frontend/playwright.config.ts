@@ -1,4 +1,8 @@
-import { defineConfig, devices } from '@playwright/test';
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { defineConfig, devices } from '@playwright/test'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /**
  * Read environment variables from file.
@@ -8,12 +12,20 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
+ * E2E_AUTOMATION=1 (see scripts/e2e-automation.sh): serial workers, no parallel specs — safe for DB-reset flows.
  */
+const e2eAutomation = process.env.E2E_AUTOMATION === '1'
+/** When E2E_AUTOMATION=1, avoid clashing with a dev server on 8848 (see scripts/e2e-automation.sh). */
+const e2eFrontendOrigin =
+  e2eAutomation
+    ? `http://localhost:${process.env.E2E_VITE_PORT ?? process.env.VITE_PORT ?? '8858'}`
+    : process.env.BASE_URL || 'http://localhost:8848'
+
 export default defineConfig({
   testDir: './tests/e2e',
   
   /* Run tests in files in parallel */
-  fullyParallel: true,
+  fullyParallel: !e2eAutomation,
   
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
@@ -21,8 +33,8 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Opt out of parallel tests on CI or full-stack automation. */
+  workers: (e2eAutomation || !!process.env.CI) ? 1 : undefined,
   
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
@@ -33,9 +45,9 @@ export default defineConfig({
   
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.BASE_URL || 'http://localhost:5173',
-    
+    /* Base URL for `page`. Automation uses E2E_VITE_PORT (default 8858) so :8848 can stay free for manual dev. */
+    baseURL: e2eFrontendOrigin,
+
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
     
@@ -90,15 +102,18 @@ export default defineConfig({
   
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    command: e2eAutomation
+      ? `VITE_API_URL=${process.env.VITE_API_URL ?? process.env.E2E_API_URL ?? 'http://127.0.0.1:8010'} VITE_PORT=${process.env.E2E_VITE_PORT ?? process.env.VITE_PORT ?? '8858'} pnpm run dev`
+      : 'pnpm run dev',
+    url: e2eAutomation ? e2eFrontendOrigin : 'http://localhost:8848',
+    // Automation always spawns its own Vite with matching API URL; dev reuse only for ad-hoc runs.
+    reuseExistingServer: !e2eAutomation,
     timeout: 120 * 1000,
   },
   
   /* Global setup and teardown */
-  globalSetup: require.resolve('./tests/e2e/global-setup.ts'),
-  globalTeardown: require.resolve('./tests/e2e/global-teardown.ts'),
+  globalSetup: path.join(__dirname, 'tests/e2e/global-setup.ts'),
+  globalTeardown: path.join(__dirname, 'tests/e2e/global-teardown.ts'),
   
   /* Test timeout */
   timeout: 30 * 1000,

@@ -12,7 +12,7 @@ from app.core.security import get_current_user
 from app.core.vault import vault_client
 from app.models.server import Server
 from app.models.organization import Organization, OrganizationMember
-from app.models.credentials_vault_path import CredentialsVaultPath
+from app.models.server import CredentialsVaultPath
 
 logger = logging.getLogger(__name__)
 

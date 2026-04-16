@@ -1,31 +1,31 @@
 categories:
-  - title: '🚀 新功能'
+  - title: 'Features'
     labels: ['feat', 'feature']
-  - title: '🛠️ 修复'
+  - title: 'Fixes'
     labels: ['fix', 'bugfix']
-  - title: '💅 样式'
+  - title: 'Style'
     labels: ['style']
-  - title: '📄 文档'
+  - title: 'Documentation'
     labels: ['docs']
-  - title: '⚡️ 性能'
+  - title: 'Performance'
     labels: ['perf']
-  - title: '🧪 测试'
+  - title: 'Tests'
     labels: ['test']
-  - title: '♻️ 重构'
+  - title: 'Refactor'
     labels: ['refactor']
-  - title: '📦 构建'
+  - title: 'Build'
     labels: ['build']
-  - title: '🚨 补丁'
+  - title: 'Patches'
     labels: ['patch', 'hotfix']
-  - title: '🌐 发布'
+  - title: 'Release'
     labels: ['release', 'publish']
-  - title: '🔧 流程'
+  - title: 'CI / workflow'
     labels: ['ci', 'cd', 'workflow']
-  - title: '⚙️ 配置'
+  - title: 'Config / chore'
     labels: ['config', 'chore']
-  - title: '📁 文件'
+  - title: 'Files'
     labels: ['file']
-  - title: '🎨 格式化'
+  - title: 'Formatting'
     labels: ['format']
-  - title: '🔀 其他'
+  - title: 'Other'
     labels: ['other', 'misc']

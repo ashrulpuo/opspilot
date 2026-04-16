@@ -38,7 +38,7 @@ jobs:
             let validationErrors = [];
             let debugInfo = [];
 
-            const hasIssueLink = body.includes('**Related Issue:** #') && !body.includes('**Related Issue:** #_');
+            const hasIssueLink = body.includes('**Related Issue:** #') && !body.includes('**Related Issue:** #_____');
             if (!hasIssueLink) {
               validationErrors.push('**Related Issue:** must link an issue (e.g. #123)');
               debugInfo.push('Missing **Related Issue:** #...');

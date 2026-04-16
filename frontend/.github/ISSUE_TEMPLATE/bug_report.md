@@ -1,51 +1,51 @@
 ---
-name: 🐛 Bug Report
-about: 报告一个 bug
+name: Bug report
+about: Report a bug
 title: '[BUG] '
 labels: ['bug', 'needs-triage']
 assignees: ''
 ---
 
-## 🐛 Bug 描述
+## Description
 
-<!-- 请简要描述这个 bug -->
+<!-- Short summary of the bug -->
 
-## 🔍 环境信息
+## Environment
 
-### 操作系统
+### Operating system
 
 - [ ] Windows
 - [ ] macOS
 - [ ] Linux
-- [ ] 于操作系统无关
+- [ ] Not OS-specific
 
-### 浏览器版本
+### Browser
 
-- [ ] Chrome **<Version>**
-- [ ] Firefox **<Version>**
-- [ ] Safari **<Version>**
-- [ ] Edge **<Version>**
-- [ ] 于浏览器无关
+- [ ] Chrome **version**
+- [ ] Firefox **version**
+- [ ] Safari **version**
+- [ ] Edge **version**
+- [ ] Not browser-specific
 
-### 仓库代码版本
+### Code version
 
-- [ ] 最新主分支代码
-- [ ] 特定版本: **\_**
+- [ ] Latest default branch
+- [ ] Specific version: **\_**
 
-## 📋 重现步骤
+## Steps to reproduce
 
-1. 进入页面 '...'
-2. 点击 '....'
-3. 滚动到 '....'
-4. 看到错误
+1. Go to '...'
+2. Click '...'
+3. Scroll to '...'
+4. See error
 
-## 📦 其他信息
+## Additional context
 
-<!-- 添加关于这个问题的任何其他上下文 -->
+<!-- Screenshots, logs, etc. -->
 
-## ✅ 检查清单
+## Checklist
 
-- [ ] 我已经搜索了现有的 issues，确认这是一个新问题
-- [ ] 我已经提供了完整的环境信息
-- [ ] 我已经提供了清晰的重现步骤
-- [ ] 我已经描述了预期和实际行为
+- [ ] I searched existing issues
+- [ ] I included environment details
+- [ ] I included clear reproduction steps
+- [ ] I described expected vs actual behavior

@@ -1,17 +1,37 @@
 """Server service for managing servers and Salt minion operations."""
+from __future__ import annotations
+
 import logging
-from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.agent_keys import generate_agent_api_key, hash_agent_api_key
+from app.core.ssh_credential_crypto import decrypt_ssh_password, encrypt_ssh_password
 from app.models.server import Server, CredentialsVaultPath
 from app.models.organization import OrganizationMember
+from app.core.config import get_settings
 from app.services.salt_service import salt_service
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AutoInstallParams:
+    username: str
+    password: str
+    port: int = 22
+
+
+@dataclass
+class CreateServerOutcome:
+    server: Server
+    agent_api_key_plaintext: str
+    auto_install: Optional[AutoInstallParams] = None
 
 
 class ServerService:
@@ -27,21 +47,13 @@ class ServerService:
         os_type: str,
         domain_name: Optional[str] = None,
         web_server_type: Optional[str] = None,
-    ) -> Server:
-        """Create a new server and set up Salt minion.
-
-        Args:
-            db: Database session
-            organization_id: Organization ID
-            user_id: User ID (for permission check)
-            hostname: Server hostname
-            ip_address: Server IP address
-            os_type: Operating system type
-            domain_name: Domain name (optional)
-            web_server_type: Web server type (optional)
-
-        Returns:
-            Created server
+        *,
+        auto_install_agent: bool = False,
+        ssh_username: Optional[str] = None,
+        ssh_password: Optional[str] = None,
+        ssh_port: int = 22,
+    ) -> CreateServerOutcome:
+        """Create a new server, register agent API key hash, and configure Salt pillar.
 
         Raises:
             ValueError: If user doesn't have permission
@@ -58,8 +70,17 @@ class ServerService:
         if not member:
             raise ValueError("User is not a member of this organization")
 
-        # Create server
         server_id = str(uuid4())
+        agent_key = generate_agent_api_key()
+
+        ssh_user_stored: Optional[str] = None
+        ssh_port_stored: Optional[int] = None
+        ssh_pw_enc: Optional[str] = None
+        if ssh_username and ssh_password:
+            ssh_user_stored = ssh_username.strip()
+            ssh_port_stored = int(ssh_port or 22)
+            ssh_pw_enc = encrypt_ssh_password(ssh_password)
+
         server = Server(
             id=server_id,
             organization_id=organization_id,
@@ -69,21 +90,34 @@ class ServerService:
             domain_name=domain_name,
             web_server_type=web_server_type,
             status="provisioning",
+            agent_api_key_hash=hash_agent_api_key(agent_key),
+            ssh_username=ssh_user_stored,
+            ssh_port=ssh_port_stored,
+            ssh_password_encrypted=ssh_pw_enc,
         )
 
         db.add(server)
         await db.commit()
         await db.refresh(server)
 
-        # Set up Salt minion configuration
-        await self._setup_salt_minion(server_id, hostname, ip_address, organization_id)
+        try:
+            await self._setup_salt_minion(server_id, hostname, ip_address, organization_id, agent_key)
+        except Exception as e:
+            logger.warning("Salt pillar setup failed for %s: %s", server_id, e)
 
-        # Update server status to active
-        server.status = "active"
+        if auto_install_agent and ssh_username and ssh_password:
+            server.status = "installing_agent"
+        else:
+            server.status = "online"
         await db.commit()
+        await db.refresh(server)
 
-        logger.info(f"Created server {server_id} for organization {organization_id}")
-        return server
+        auto: Optional[AutoInstallParams] = None
+        if auto_install_agent and ssh_username and ssh_password:
+            auto = AutoInstallParams(username=ssh_username, password=ssh_password, port=ssh_port or 22)
+
+        logger.info("Created server %s for organization %s", server_id, organization_id)
+        return CreateServerOutcome(server=server, agent_api_key_plaintext=agent_key, auto_install=auto)
 
     async def _setup_salt_minion(
         self,
@@ -91,38 +125,21 @@ class ServerService:
         hostname: str,
         ip_address: str,
         organization_id: str,
+        api_key: str,
     ) -> None:
-        """Set up Salt minion for server.
+        """Set Salt pillar for minion (same API key as push agent when configured)."""
+        minion = f"opspilot-minion-{server_id}"
+        settings = get_settings()
+        try:
+            await salt_service.set_pillar(minion, "opspilot:api_key", api_key)
+            await salt_service.set_pillar(minion, "opspilot:organization_id", organization_id)
+            await salt_service.set_pillar(minion, "opspilot:server_id", server_id)
+            await salt_service.set_pillar(minion, "opspilot:api_base_url", settings.PUBLIC_API_BASE_URL)
+        except Exception as e:
+            logger.warning("Salt pillar API error for server %s: %s", server_id, e)
+            raise
 
-        This would typically involve:
-        1. Installing Salt minion on the server
-        2. Configuring the minion
-        3. Accepting the minion key on the master
-
-        Args:
-            server_id: Server ID
-            hostname: Server hostname
-            ip_address: Server IP address
-            organization_id: Organization ID
-        """
-        # Generate API key for server
-        api_key = str(uuid4())
-
-        # Set pillar data for server
-        await salt_service.set_pillar(
-            f"opspilot-minion-{server_id}",
-            "opspilot:api_key",
-            api_key,
-        )
-
-        await salt_service.set_pillar(
-            f"opspilot-minion-{server_id}",
-            "opspilot:organization_id",
-            organization_id,
-        )
-
-        # TODO: Implement actual minion setup (SSH to server, install Salt, etc.)
-        logger.info(f"Salt minion setup for server {server_id} completed")
+        logger.info("Salt minion pillar setup for server %s completed", server_id)
 
     async def get_server(
         self,
@@ -274,6 +291,35 @@ class ServerService:
         logger.info(f"Deleted server {server_id}")
         return True
 
+    async def get_metrics_for_dashboard(
+        self,
+        db: AsyncSession,
+        server_id: str,
+        user_id: str,
+    ) -> Dict[str, Any]:
+        """Prefer fresh push-agent metrics; otherwise Salt pull; else stale push payload."""
+        from app.services.metrics_push_service import get_fresh_push_metrics, get_latest_push_sample
+
+        fresh = await get_fresh_push_metrics(db, server_id)
+        if fresh is not None:
+            return fresh
+        try:
+            return await self.collect_metrics(db, server_id, user_id)
+        except ValueError as e:
+            if str(e) == "Server not found":
+                raise
+            logger.warning("Salt collect_metrics failed for %s: %s", server_id, e)
+            latest = await get_latest_push_sample(db, server_id)
+            if latest is not None:
+                return latest[1]
+            raise ValueError("Failed to collect metrics") from e
+        except Exception as e:
+            logger.warning("Salt collect_metrics failed for %s: %s", server_id, e)
+            latest = await get_latest_push_sample(db, server_id)
+            if latest is not None:
+                return latest[1]
+            raise ValueError("Failed to collect metrics") from e
+
     async def collect_metrics(
         self,
         db: AsyncSession,
@@ -409,6 +455,20 @@ class ServerService:
         except Exception as e:
             logger.error(f"Failed to apply state {state} on server {server_id}: {e}")
             raise ValueError(f"Failed to apply state: {e}")
+
+    async def get_decrypted_ssh_credentials(
+        self,
+        db: AsyncSession,
+        server_id: str,
+        user_id: str,
+    ) -> Optional[Tuple[str, int, str]]:
+        """Return (username, port, plaintext_password) for OpsPilot-initiated SSH. None if unset."""
+        server = await self.get_server(db, server_id, user_id)
+        if not server or not server.ssh_username or not server.ssh_password_encrypted:
+            return None
+        port = int(server.ssh_port or 22)
+        password = decrypt_ssh_password(server.ssh_password_encrypted)
+        return server.ssh_username, port, password
 
 
 # Global server service instance

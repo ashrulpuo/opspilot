@@ -9,7 +9,7 @@ import logging
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.server import Server
+from app.models.server import Server, CredentialsVaultPath
 from app.models.organization import Organization, OrganizationMember
 
 logger = logging.getLogger(__name__)

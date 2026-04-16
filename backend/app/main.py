@@ -36,10 +36,22 @@ register_exception_handlers(app)
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
+@app.get("/")
+async def root():
+    """Identify this process as OpsPilot API (useful when port 8000 is shared/confused with other services)."""
+    return {
+        "service": "opspilot-api",
+        "version": "0.1.0",
+        "api_prefix": settings.API_V1_STR,
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "version": "0.1.0"}
+    return {"status": "healthy", "version": "0.1.0", "service": "opspilot-api"}
 
 
 @app.on_event("startup")

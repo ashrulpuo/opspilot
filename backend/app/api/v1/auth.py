@@ -1,12 +1,17 @@
-"""Authentication endpoints."""
+"""Authentication endpoints.
+
+Bootstrap flow (first admin): GET /auth/setup-required -> POST /auth/bootstrap
+creates User + Organization + OrganizationMember, returns JWT like POST /auth/login.
+"""
+import re
 import secrets
 import uuid
 from datetime import timedelta, datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, func, text
 import redis.asyncio as redis
 
 from app.core.security import (
@@ -17,6 +22,7 @@ from app.core.security import (
     get_current_user as get_current_user_dep,
 )
 from app.models.user import User
+from app.models.installation_state import InstallationState
 from app.models.organization import Organization, OrganizationMember
 from app.models.password_reset import PasswordReset
 from app.core.database import get_db
@@ -112,6 +118,18 @@ class RegisterRequest(BaseModel):
         return v
 
 
+class BootstrapRequest(RegisterRequest):
+    """First-admin setup (same fields as register, optional org display name)."""
+
+    organization_name: Optional[str] = None
+
+
+class SetupRequiredResponse(BaseModel):
+    """Whether the one-time initial setup wizard should run (see InstallationState)."""
+
+    setup_required: bool
+
+
 class TokenRefreshRequest(BaseModel):
     """Token refresh request schema."""
 
@@ -183,6 +201,158 @@ class ResetPasswordResponse(BaseModel):
     """Reset password response schema."""
 
     message: str
+
+
+def _slugify(value: str, max_length: int = 80) -> str:
+    """URL-safe organization slug from a display string or email local-part."""
+    s = value.lower().strip()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    s = re.sub(r"-+", "-", s).strip("-")
+    return (s or "org")[:max_length]
+
+
+async def _next_unique_org_slug(db: AsyncSession, base_slug: str) -> str:
+    """Ensure organizations.slug is unique (suffix -2, -3, ... if needed)."""
+    suffix = 0
+    candidate = _slugify(base_slug) if base_slug else "org"
+    while True:
+        result = await db.execute(select(Organization.id).where(Organization.slug == candidate))
+        if result.scalar_one_or_none() is None:
+            return candidate
+        suffix += 1
+        extra = f"-{suffix}"
+        candidate = f"{_slugify(base_slug)[: max(1, 80 - len(extra))]}{extra}"
+
+
+async def _pg_bootstrap_lock(db: AsyncSession) -> None:
+    """Serialize concurrent bootstrap attempts on PostgreSQL."""
+    conn = await db.connection()
+    if getattr(conn, "dialect", None) and conn.dialect.name == "postgresql":
+        await db.execute(text("SELECT pg_advisory_xact_lock(87261103)"))
+
+
+@router.get("/setup-required", response_model=SetupRequiredResponse)
+async def setup_required(db: AsyncSession = Depends(get_db)):
+    """True when there are no users yet, or install row says onboarding not finished.
+
+    If ``users`` is empty we always require setup (even when ``initial_setup_completed`` is
+    stale true after a manual truncate), so the UI and POST /auth/bootstrap stay aligned.
+    """
+    result = await db.execute(select(func.count()).select_from(User))
+    count = result.scalar_one()
+    if count == 0:
+        return SetupRequiredResponse(setup_required=True)
+
+    inst_r = await db.execute(
+        select(InstallationState).where(InstallationState.id == InstallationState.ROW_ID)
+    )
+    inst = inst_r.scalar_one_or_none()
+    if inst is not None:
+        return SetupRequiredResponse(setup_required=not inst.initial_setup_completed)
+    return SetupRequiredResponse(setup_required=False)
+
+
+@router.post("/bootstrap", response_model=LoginResponse)
+async def bootstrap_first_admin(
+    http_request: Request,
+    body: BootstrapRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create the first user, organization, and admin membership; return JWT (like login)."""
+    redis_client = await get_redis_client()
+    client_host = http_request.client.host if http_request.client else "unknown"
+    rate_key = f"bootstrap_rate:{client_host}"
+    if not await check_rate_limit(redis_client, rate_key, max_attempts=10, window_seconds=3600):
+        ttl = await get_rate_limit_ttl(redis_client, rate_key)
+        await redis_client.close()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many setup attempts. Try again in {ttl} seconds.",
+        )
+
+    try:
+        await _pg_bootstrap_lock(db)
+
+        result = await db.execute(select(func.count()).select_from(User))
+        if result.scalar_one() > 0:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Setup already completed",
+            )
+
+        dup = await db.execute(select(User.id).where(User.email == body.email))
+        if dup.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
+
+        user_id = str(uuid.uuid4())
+        org_id = str(uuid.uuid4())
+        org_name = (body.organization_name or "").strip()
+        if not org_name:
+            org_name = f"{body.full_name}'s Organization"
+        slug_base = org_name if body.organization_name else body.email.split("@")[0]
+        slug = await _next_unique_org_slug(db, slug_base)
+
+        user = User(
+            id=user_id,
+            email=body.email,
+            password_hash=get_password_hash(body.password),
+            full_name=body.full_name,
+            is_active=True,
+        )
+        org = Organization(id=org_id, name=org_name, slug=slug)
+        org_member = OrganizationMember(
+            user_id=user_id,
+            organization_id=org_id,
+            role="admin",
+        )
+
+        db.add(user)
+        db.add(org)
+        db.add(org_member)
+        await db.commit()
+
+        inst_after = await db.execute(
+            select(InstallationState).where(InstallationState.id == InstallationState.ROW_ID)
+        )
+        inst_row = inst_after.scalar_one_or_none()
+        now = datetime.utcnow()
+        if inst_row is None:
+            db.add(
+                InstallationState(
+                    id=InstallationState.ROW_ID,
+                    initial_setup_completed=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        else:
+            inst_row.initial_setup_completed = True
+            inst_row.updated_at = now
+        await db.commit()
+
+        access_token_expires = timedelta(minutes=60)
+        access_token = create_access_token(
+            data={
+                "sub": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+            },
+            expires_delta=access_token_expires,
+        )
+
+        return LoginResponse(
+            access_token=access_token,
+            user={
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+            },
+        )
+    finally:
+        await redis_client.close()
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -267,8 +437,13 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
             detail="Email already registered",
         )
 
+    if not settings.ALLOW_PUBLIC_REGISTRATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public registration is disabled. Use one-time initial setup on a fresh install, or ask an administrator for an account.",
+        )
+
     # Create new user
-    import uuid
     user_id = str(uuid.uuid4())
     user = User(
         id=user_id,

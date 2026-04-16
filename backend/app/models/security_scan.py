@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base
+from app.core.database import Base
 
 
 class SecurityScan(Base):
@@ -33,7 +33,7 @@ class SecurityScan(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False, index=True)
     
     # Relationships
-    server = relationship("Server", back_populates="security_scans")
+    server = relationship("Server", foreign_keys=[server_id])
     
     def is_complete(self) -> bool:
         """Check if scan is complete (completed or failed)."""

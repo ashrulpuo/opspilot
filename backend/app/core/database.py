@@ -45,7 +45,7 @@ async def init_db():
     # In production, use Alembic migrations
     async with engine.begin() as conn:
         # Import all models to ensure they're registered with Base
-        from app.models import user, organization, server, alert, ssh_session
+        from app.models import user, organization, server, server_metrics_push, alert, ssh_session
 
         # Create extensions (TimescaleDB)
         await conn.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")

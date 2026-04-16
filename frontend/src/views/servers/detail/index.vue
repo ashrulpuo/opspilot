@@ -22,6 +22,7 @@
               </el-tag>
             </div>
             <p class="server-subtitle">{{ server.ip_address }}</p>
+            <p v-if="organizationName" class="server-org">Organization: {{ organizationName }}</p>
           </div>
         </div>
         <div class="header-actions">
@@ -185,21 +186,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Monitor, Edit, Delete, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { ServersAPI } from '@/api/opspilot/servers'
 import { SSHTerminalAPI } from '@/api/opspilot/commands'
+import { useOpsPilotOrganizationStore } from '@/stores/modules/opspilot'
 
 const route = useRoute()
 const router = useRouter()
+const orgStore = useOpsPilotOrganizationStore()
 
 const serverId = route.params.id as string
 const activeTab = ref((route.query.tab as string) || 'overview')
 
 const loading = ref(true)
 const server = ref<any>(null)
+const organizationName = computed(() => {
+  const id = server.value?.organization_id as string | undefined
+  if (!id) return ''
+  return orgStore.organizations.find(o => o.id === id)?.name ?? id
+})
 const showEditDialog = ref(false)
 const editFormRef = ref()
 
@@ -394,6 +402,13 @@ const handleDelete = async () => {
 const loadServer = async () => {
   try {
     loading.value = true
+    if (orgStore.organizations.length === 0) {
+      try {
+        await orgStore.fetchOrganizations()
+      } catch {
+        /* org label is optional */
+      }
+    }
     server.value = await ServersAPI.get(serverId)
 
     // Populate edit form
@@ -488,6 +503,12 @@ onUnmounted(() => {
       line-height: 1.5;
       margin: 0;
     }
+
+    .server-org {
+      font-size: 0.875rem;
+      color: #656a76;
+      margin: 8px 0 0;
+    }
   }
 
   .header-actions {
@@ -503,6 +524,10 @@ html.dark .page-header .server-info {
 
   .server-subtitle {
     color: #d5d7db;
+  }
+
+  .server-org {
+    color: #b2b6bd;
   }
 }
 

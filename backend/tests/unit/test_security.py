@@ -47,14 +47,16 @@ class TestSecurityUtilities:
         
         assert hash1 != hash2
 
-    def test_password_hashing_same_password_same_hash(self):
-        """Test that same password produces same hash."""
+    def test_password_hashing_same_password_different_salts(self):
+        """Same password should yield different hashes (salt), both verifiable."""
         password = "samepassword"
-        
+
         hash1 = get_password_hash(password)
         hash2 = get_password_hash(password)
-        
-        assert hash1 == hash2
+
+        assert hash1 != hash2
+        assert verify_password(password, hash1) is True
+        assert verify_password(password, hash2) is True
 
     def test_password_verification_with_special_characters(self):
         """Test password verification with special characters."""

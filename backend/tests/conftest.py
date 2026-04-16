@@ -7,9 +7,12 @@ from sqlalchemy.orm import sessionmaker
 import asyncio
 import os
 
-# Add backend to path
 import sys
-sys.path.insert(0, '/Volumes/ashrul/Development/Active/opspilot/backend')
+from pathlib import Path
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
 
 # Test database URL (use in-memory SQLite for tests)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -26,18 +29,17 @@ def event_loop():
 @pytest.fixture
 async def db_engine(event_loop):
     """Create test database engine."""
-    # Import here to avoid circular imports
-    from app.models.base import Base
+    from app.core.database import Base
+
+    import app.models  # noqa: F401 — register models on `Base.metadata`
 
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 
-    # Create all tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     yield engine
 
-    # Drop all tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 

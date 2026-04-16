@@ -1,7 +1,7 @@
 # OpsPilot Makefile
 # Common commands for development and testing
 
-.PHONY: help install test test-unit test-integration test-e2e coverage lint security-scan clean dev gitlab-setup gitlab-pipeline gitlab-pipeline-dry gitlab-branch gitlab-mr gitlab-status salt-up salt-down salt-keys salt-accept
+.PHONY: help install test test-unit test-integration test-e2e test-e2e-automation coverage lint security-scan clean dev gitlab-setup gitlab-pipeline gitlab-pipeline-dry gitlab-branch gitlab-mr gitlab-status salt-up salt-down salt-keys salt-accept
 
 # Default target
 help:
@@ -18,6 +18,7 @@ help:
 	@echo "  make test-unit        - Run unit tests"
 	@echo "  make test-integration - Run integration tests"
 	@echo "  make test-e2e        - Run E2E tests (frontend)"
+	@echo "  make test-e2e-automation - Full stack E2E (Docker DB, API, Playwright)"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make coverage         - Run tests with coverage report"
@@ -107,7 +108,12 @@ test-integration:
 
 test-e2e:
 	@echo "Running E2E tests..."
-	@cd frontend && npm run test:e2e
+	@cd frontend && pnpm run test:e2e
+
+test-e2e-automation:
+	@echo "Running full-stack E2E automation (see scripts/e2e-automation.sh)..."
+	@chmod +x scripts/e2e-automation.sh
+	@./scripts/e2e-automation.sh
 
 # ============================================
 # Quality

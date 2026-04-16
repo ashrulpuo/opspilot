@@ -10,6 +10,8 @@ import type {
   CreateOrganizationRequest,
   UpdateOrganizationRequest,
   PaginatedResponse,
+  CreateServerRequest,
+  Server,
 } from './types'
 
 export const OrganizationsAPI = {
@@ -98,5 +100,12 @@ export const OrganizationsAPI = {
    */
   switchOrganization: (id: string): Promise<void> => {
     return request.post<void>(`/organizations/${id}/switch`)
+  },
+
+  /**
+   * Create a server under an organization
+   */
+  createServer: (organizationId: string, data: CreateServerRequest): Promise<Server> => {
+    return request.post(`/organizations/${organizationId}/servers`, data)
   },
 }

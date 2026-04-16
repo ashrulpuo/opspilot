@@ -3,81 +3,17 @@
     <!-- Progress Steps -->
     <div class="progress-steps">
       <el-steps :active="currentStep" finish-status="success" align-center>
-        <el-step title="Create Account" />
-        <el-step title="Create Organization" />
-        <el-step title="Add First Server" />
-        <el-step title="Complete Setup" />
+        <el-step title="Organization" />
+        <el-step title="First server" />
+        <el-step title="Done" />
       </el-steps>
     </div>
 
-    <!-- Step 1: Create Account -->
+    <!-- Step 0: Create Organization (skip if bootstrap already created one) -->
     <div v-show="currentStep === 0" class="step-content">
       <div class="step-header">
-        <h2 class="step-title">Create Your Account</h2>
-        <p class="step-subtitle">Enter your details to get started with OpsPilot</p>
-      </div>
-
-      <el-form
-        ref="accountFormRef"
-        :model="accountForm"
-        :rules="accountRules"
-        class="onboarding-form"
-        @submit.prevent="handleAccountSubmit"
-      >
-        <el-form-item label="Full Name" prop="full_name">
-          <el-input
-            v-model="accountForm.full_name"
-            placeholder="John Doe"
-            size="large"
-            :prefix-icon="User"
-            :disabled="loading"
-          />
-        </el-form-item>
-
-        <el-form-item label="Email" prop="email">
-          <el-input
-            v-model="accountForm.email"
-            placeholder="john@example.com"
-            size="large"
-            :prefix-icon="Message"
-            :disabled="loading"
-          />
-        </el-form-item>
-
-        <el-form-item label="Password" prop="password">
-          <el-input
-            v-model="accountForm.password"
-            type="password"
-            placeholder="Min. 8 characters"
-            size="large"
-            :prefix-icon="Lock"
-            :disabled="loading"
-            show-password
-          />
-        </el-form-item>
-
-        <el-button
-          type="primary"
-          size="large"
-          class="onboarding-button"
-          :loading="loading"
-          @click="handleAccountSubmit"
-        >
-          Continue
-        </el-button>
-      </el-form>
-
-      <div class="step-footer">
-        <span class="footer-text">Already have an account?</span>
-        <router-link to="/login" class="footer-link">Sign in</router-link>
-      </div>
-    </div>
-
-    <!-- Step 2: Create Organization -->
-    <div v-show="currentStep === 1" class="step-content">
-      <div class="step-header">
-        <h2 class="step-title">Create Your Organization</h2>
-        <p class="step-subtitle">Organizations help you manage your servers and team members</p>
+        <h2 class="step-title">Create your organization</h2>
+        <p class="step-subtitle">Optional if you already have one from initial setup — otherwise create one here</p>
       </div>
 
       <el-form
@@ -119,15 +55,12 @@
       </el-form>
 
       <div class="step-footer">
-        <el-button link @click="previousStep">
-          <el-icon><ArrowLeft /></el-icon>
-          Back
-        </el-button>
+        <span class="footer-text">Accounts are not self-registered — use initial setup on a new install.</span>
       </div>
     </div>
 
-    <!-- Step 3: Add First Server -->
-    <div v-show="currentStep === 2" class="step-content">
+    <!-- Step 1: Add First Server -->
+    <div v-show="currentStep === 1" class="step-content">
       <div class="step-header">
         <h2 class="step-title">Add Your First Server</h2>
         <p class="step-subtitle">Connect your first server to start monitoring</p>
@@ -203,8 +136,8 @@
       </div>
     </div>
 
-    <!-- Step 4: Complete Setup -->
-    <div v-show="currentStep === 3" class="step-content">
+    <!-- Step 2: Complete -->
+    <div v-show="currentStep === 2" class="step-content">
       <div class="complete-container">
         <div class="complete-icon">
           <el-icon><CircleCheck /></el-icon>
@@ -247,15 +180,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { User, Lock, OfficeBuilding, Monitor, Connection, Link, ArrowLeft, CircleCheck, Bell, Operation, DataAnalysis } from '@element-plus/icons-vue'
+import { OfficeBuilding, Monitor, Connection, Link, ArrowLeft, CircleCheck, Bell, Operation, DataAnalysis } from '@element-plus/icons-vue'
 import { useOpsPilotAuthStore } from '@/stores/modules/opspilot'
 import { useOpsPilotOrganizationStore } from '@/stores/modules/opspilot'
-import { AuthAPI } from '@/api/opspilot/auth'
 import { OrganizationsAPI } from '@/api/opspilot/organizations'
-import type { RegisterRequest, ServerRequest, OrganizationRequest } from '@/api/opspilot/types'
 
 const router = useRouter()
 const authStore = useOpsPilotAuthStore()
@@ -265,16 +196,8 @@ const currentStep = ref(0)
 const loading = ref(false)
 
 // Form refs
-const accountFormRef = ref<FormInstance>()
 const orgFormRef = ref<FormInstance>()
 const serverFormRef = ref<FormInstance>()
-
-// Account form data
-const accountForm = reactive({
-  full_name: '',
-  email: '',
-  password: '',
-})
 
 // Organization form data
 const orgForm = reactive({
@@ -289,22 +212,6 @@ const serverForm = reactive({
   os_type: 'linux' as 'linux' | 'macos' | 'windows',
   domain_name: '',
 })
-
-// Account form rules
-const accountRules: FormRules = {
-  full_name: [
-    { required: true, message: 'Please enter your full name', trigger: 'blur' },
-    { min: 2, message: 'Name must be at least 2 characters', trigger: 'blur' },
-  ],
-  email: [
-    { required: true, message: 'Please enter your email', trigger: 'blur' },
-    { type: 'email', message: 'Please enter a valid email', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: 'Please enter a password', trigger: 'blur' },
-    { min: 8, message: 'Password must be at least 8 characters', trigger: 'blur' },
-  ],
-}
 
 // Organization form rules
 const orgRules: FormRules = {
@@ -352,39 +259,23 @@ const previousStep = () => {
 }
 
 const nextStep = () => {
-  if (currentStep.value < 3) {
+  if (currentStep.value < 2) {
     currentStep.value++
   }
 }
 
-// Step 1: Create Account
-const handleAccountSubmit = async () => {
-  if (!accountFormRef.value) return
-
+onMounted(async () => {
   try {
-    const valid = await accountFormRef.value.validate()
-    if (!valid) return
-
-    loading.value = true
-
-    // Create account
-    await authStore.register({
-      full_name: accountForm.full_name,
-      email: accountForm.email,
-      password: accountForm.password,
-      confirm_password: accountForm.password,
-    })
-
-    ElMessage.success('Account created successfully')
-    nextStep()
-  } catch (error: any) {
-    ElMessage.error(error.message || 'Failed to create account')
-  } finally {
-    loading.value = false
+    await orgStore.fetchOrganizations()
+    if (orgStore.organizations.length > 0) {
+      currentStep.value = 1
+    }
+  } catch {
+    /* stay on org step */
   }
-}
+})
 
-// Step 2: Create Organization
+// Step 0: Create Organization
 const handleOrgSubmit = async () => {
   if (!orgFormRef.value) return
 
@@ -409,7 +300,7 @@ const handleOrgSubmit = async () => {
   }
 }
 
-// Step 3: Add First Server
+// Step 1: Add First Server
 const handleServerSubmit = async () => {
   if (!serverFormRef.value) return
 
@@ -419,19 +310,16 @@ const handleServerSubmit = async () => {
 
     loading.value = true
 
-    // Get current organization
-    const orgId = authStore.user?.organizations?.[0]?.id
+    const orgId =
+      orgStore.currentOrganization?.id || orgStore.organizations[0]?.id || authStore.user?.organizations?.[0]?.id
     if (!orgId) {
-      ElMessage.error('No organization found')
+      ElMessage.error('No organization found. Create an organization first.')
       return
     }
 
-    // Add server
-    await orgStore.createServer(orgId, {
+    await OrganizationsAPI.createServer(orgId, {
       hostname: serverForm.hostname,
       ip_address: serverForm.ip_address,
-      port: 22,
-      ssh_port: 22,
       os_type: serverForm.os_type,
       domain_name: serverForm.domain_name || undefined,
     })
@@ -445,7 +333,7 @@ const handleServerSubmit = async () => {
   }
 }
 
-// Step 4: Complete
+// Step 2: Complete
 const goToDashboard = () => {
   router.push('/dashboard')
 }

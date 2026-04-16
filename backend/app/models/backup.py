@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Text, Boolean, Integer, BigInteger, Forei
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base
+from app.core.database import Base
 
 
 class BackupSchedule(Base):
@@ -29,7 +29,7 @@ class BackupSchedule(Base):
     updated_at = Column(String, nullable=False, server_default="NOW()")
 
     # Relationships
-    server = relationship("Server", back_populates="backup_schedules")
+    server = relationship("Server", foreign_keys=[server_id])
     organization = relationship("Organization")
     backup_reports = relationship("BackupReport", back_populates="backup_schedule", cascade="all, delete-orphan")
 

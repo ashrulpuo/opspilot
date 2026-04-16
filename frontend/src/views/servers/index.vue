@@ -6,17 +6,26 @@
         <h1 class="page-title">Servers</h1>
         <p class="page-subtitle">Manage your infrastructure</p>
       </div>
-      <el-button type="primary" @click="showAddDialog = true">
+      <el-button type="primary" :disabled="!canManageServers" @click="showAddDialog = true">
         <el-icon><Plus /></el-icon>
         Add Server
       </el-button>
     </div>
 
-    <!-- Organization Selector -->
-    <div class="org-selector" v-if="orgStore.organizations.length > 1">
+    <!-- Organization context -->
+    <div v-if="orgStore.organizations.length === 0" class="org-banner hc-card">
+      <p class="org-banner-text">You need an organization before you can add or list servers.</p>
+      <el-button type="primary" @click="goCreateOrganization">Create organization</el-button>
+    </div>
+
+    <div class="org-selector" v-else-if="orgStore.organizations.length > 1">
       <el-select v-model="selectedOrgId" placeholder="Select organization" @change="handleOrgChange">
         <el-option v-for="org in orgStore.organizations" :key="org.id" :label="org.name" :value="org.id" />
       </el-select>
+    </div>
+
+    <div v-else class="org-single-label">
+      <span class="org-label-text">{{ orgStore.currentOrganization?.name || orgStore.organizations[0]?.name }}</span>
     </div>
 
     <!-- Stats Cards -->
@@ -137,8 +146,31 @@
     </div>
 
     <!-- Add Server Dialog -->
-    <el-dialog v-model="showAddDialog" title="Add New Server" width="600px" :close-on-click-modal="false">
-      <el-form ref="addFormRef" :model="addForm" :rules="addRules" label-width="120px">
+    <el-dialog
+      v-model="showAddDialog"
+      title="Add New Server"
+      width="680px"
+      :close-on-click-modal="false"
+      @opened="onAddDialogOpened"
+    >
+      <el-form ref="addFormRef" :model="addForm" :rules="addRules" label-width="148px" label-position="right">
+        <el-form-item label="Organization" prop="organization_id">
+          <el-select
+            v-model="addForm.organization_id"
+            placeholder="Select organization"
+            :disabled="addLoading || orgStore.organizations.length === 0"
+            style="width: 100%"
+            filterable
+          >
+            <el-option
+              v-for="org in orgStore.organizations"
+              :key="org.id"
+              :label="`${org.name} (${org.slug})`"
+              :value="org.id"
+            />
+          </el-select>
+        </el-form-item>
+
         <el-form-item label="Hostname" prop="hostname">
           <el-input v-model="addForm.hostname" placeholder="e.g., web-server-01" :disabled="addLoading" />
         </el-form-item>
@@ -148,12 +180,45 @@
         </el-form-item>
 
         <el-form-item label="OS Type" prop="os_type">
-          <el-select v-model="addForm.os_type" placeholder="Select OS type" :disabled="addLoading" style="width: 100%">
+          <el-select
+            v-model="addForm.os_type"
+            placeholder="Select OS type"
+            :disabled="addLoading"
+            style="width: 100%"
+            @change="onOsTypeChange"
+          >
             <el-option label="Linux" value="linux" />
             <el-option label="macOS" value="macos" />
             <el-option label="Windows" value="windows" />
           </el-select>
         </el-form-item>
+
+        <el-form-item label="Auto-install agent" prop="auto_install_agent">
+          <el-checkbox v-model="addForm.auto_install_agent" :disabled="addLoading || addForm.os_type !== 'linux'">
+            Install OpsPilot push agent over SSH (Linux only)
+          </el-checkbox>
+          <p v-if="addForm.os_type !== 'linux'" class="add-form-hint">Agent auto-install is available for Linux only.</p>
+        </el-form-item>
+
+        <template v-if="addForm.auto_install_agent && addForm.os_type === 'linux'">
+          <el-form-item label="SSH user" prop="ssh_username">
+            <el-input v-model="addForm.ssh_username" placeholder="e.g. root" :disabled="addLoading" autocomplete="off" />
+          </el-form-item>
+          <el-form-item label="SSH port" prop="ssh_port">
+            <el-input-number v-model="addForm.ssh_port" :min="1" :max="65535" :disabled="addLoading" />
+          </el-form-item>
+          <el-form-item label="SSH password" prop="ssh_password">
+            <el-input
+              v-model="addForm.ssh_password"
+              type="password"
+              show-password
+              placeholder="Stored encrypted for OpsPilot SSH & auto-install"
+              :disabled="addLoading"
+              autocomplete="new-password"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </template>
 
         <el-form-item label="Domain Name" prop="domain_name">
           <el-input v-model="addForm.domain_name" placeholder="e.g., example.com (optional)" :disabled="addLoading" />
@@ -185,13 +250,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import type { CreateServerRequest } from '@/api/opspilot/types'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Monitor, View, Delete, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { useOpsPilotServerStore } from '@/stores/modules/opspilot'
 import { useOpsPilotOrganizationStore } from '@/stores/modules/opspilot'
-import { OrganizationsAPI } from '@/api/opspilot/organizations'
 
 const router = useRouter()
 const serverStore = useOpsPilotServerStore()
@@ -202,15 +267,29 @@ const addLoading = ref(false)
 const addFormRef = ref<FormInstance>()
 const selectedOrgId = ref<string>()
 
+const canManageServers = computed(
+  () => !!orgStore.currentOrganization?.id || !!selectedOrgId.value,
+)
+
+const goCreateOrganization = () => {
+  router.push('/onboarding')
+}
+
 const addForm = reactive({
+  organization_id: '',
   hostname: '',
   ip_address: '',
   os_type: 'linux' as 'linux' | 'macos' | 'windows',
   domain_name: '',
   web_server_type: '' as string | undefined,
+  auto_install_agent: true,
+  ssh_username: 'root',
+  ssh_port: 22,
+  ssh_password: '',
 })
 
 const addRules: FormRules = {
+  organization_id: [{ required: true, message: 'Please select an organization', trigger: 'change' }],
   hostname: [
     { required: true, message: 'Please enter hostname', trigger: 'blur' },
     { min: 3, message: 'Hostname must be at least 3 characters', trigger: 'blur' },
@@ -229,6 +308,34 @@ const addRules: FormRules = {
     },
   ],
   os_type: [{ required: true, message: 'Please select OS type', trigger: 'change' }],
+  ssh_username: [
+    {
+      validator: (_rule, value: string, callback) => {
+        if (addForm.auto_install_agent && addForm.os_type === 'linux') {
+          if (!value || !String(value).trim()) {
+            callback(new Error('SSH username is required for auto-install'))
+            return
+          }
+        }
+        callback()
+      },
+      trigger: 'blur',
+    },
+  ],
+  ssh_password: [
+    {
+      validator: (_rule, value: string, callback) => {
+        if (addForm.auto_install_agent && addForm.os_type === 'linux') {
+          if (!value) {
+            callback(new Error('SSH password is required for auto-install'))
+            return
+          }
+        }
+        callback()
+      },
+      trigger: 'blur',
+    },
+  ],
 }
 
 const getOSType = (osType: string) => {
@@ -247,12 +354,15 @@ const getOSType = (osType: string) => {
 const getStatusType = (status: string) => {
   switch (status) {
     case 'online':
+    case 'active':
       return 'success'
     case 'offline':
       return 'info'
     case 'error':
       return 'danger'
     case 'connecting':
+    case 'installing_agent':
+    case 'provisioning':
       return 'warning'
     default:
       return 'info'
@@ -274,7 +384,22 @@ const formatDate = (dateString: string): string => {
 }
 
 const handleOrgChange = async (orgId: string) => {
+  const org = orgStore.organizations.find(o => o.id === orgId)
+  if (org) {
+    orgStore.setCurrentOrganization(org)
+  }
   await serverStore.fetchServers(orgId)
+}
+
+function onAddDialogOpened() {
+  addForm.organization_id =
+    selectedOrgId.value || orgStore.currentOrganization?.id || orgStore.organizations[0]?.id || ''
+}
+
+function onOsTypeChange() {
+  if (addForm.os_type !== 'linux') {
+    addForm.auto_install_agent = false
+  }
 }
 
 const handleRowClick = (row: any) => {
@@ -300,7 +425,7 @@ const handleAdd = async () => {
       return
     }
 
-    const orgId = selectedOrgId.value || orgStore.currentOrganization?.id
+    const orgId = addForm.organization_id
     if (!orgId) {
       ElMessage.error('No organization selected')
       return
@@ -308,14 +433,25 @@ const handleAdd = async () => {
 
     addLoading.value = true
 
-    await OrganizationsAPI.createServer(orgId, {
-      hostname: addForm.hostname,
-      ip_address: addForm.ip_address,
-      port: 22,
-      ssh_port: 22,
+    const payload: CreateServerRequest = {
+      hostname: addForm.hostname.trim(),
+      ip_address: addForm.ip_address.trim(),
       os_type: addForm.os_type,
-      tags: [],
-    })
+      domain_name: addForm.domain_name?.trim() || undefined,
+      web_server_type: addForm.web_server_type || undefined,
+    }
+    if (addForm.auto_install_agent && addForm.os_type === 'linux') {
+      payload.auto_install_agent = true
+      payload.ssh = {
+        username: addForm.ssh_username.trim(),
+        password: addForm.ssh_password,
+        port: addForm.ssh_port || 22,
+      }
+    } else {
+      payload.auto_install_agent = false
+    }
+
+    await serverStore.createServer(orgId, payload)
 
     ElMessage.success('Server added successfully')
     showAddDialog.value = false
@@ -323,7 +459,14 @@ const handleAdd = async () => {
     // Reset form
     addFormRef.value.resetFields()
 
-    // Refresh server list
+    // Match page context to org where the server was created, then refresh list
+    if (orgStore.organizations.length > 1) {
+      selectedOrgId.value = orgId
+      const org = orgStore.organizations.find(o => o.id === orgId)
+      if (org) {
+        orgStore.setCurrentOrganization(org)
+      }
+    }
     await serverStore.fetchServers(orgId)
   } catch (error: any) {
     console.error('Add server error:', error)
@@ -344,15 +487,18 @@ const handleDelete = async (row: any) => {
 }
 
 onMounted(async () => {
-  // Fetch organizations
   if (orgStore.organizations.length === 0) {
     await orgStore.fetchOrganizations()
   }
 
-  // Set selected organization
-  selectedOrgId.value = orgStore.currentOrganization?.id
+  selectedOrgId.value = orgStore.currentOrganization?.id || orgStore.organizations[0]?.id
+  if (selectedOrgId.value && orgStore.currentOrganization?.id !== selectedOrgId.value) {
+    const org = orgStore.organizations.find(o => o.id === selectedOrgId.value)
+    if (org) {
+      orgStore.setCurrentOrganization(org)
+    }
+  }
 
-  // Fetch servers
   await serverStore.fetchServers(selectedOrgId.value)
 })
 </script>
@@ -409,6 +555,42 @@ html.dark .page-header .header-left {
   .page-subtitle {
     color: #d5d7db;
   }
+}
+
+.org-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+
+  .org-banner-text {
+    margin: 0;
+    flex: 1;
+    min-width: 200px;
+    font-size: 0.9375rem;
+    color: #656a76;
+    line-height: 1.5;
+  }
+}
+
+html.dark .org-banner .org-banner-text {
+  color: #b2b6bd;
+}
+
+.org-single-label {
+  margin-bottom: 24px;
+
+  .org-label-text {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #15181e;
+  }
+}
+
+html.dark .org-single-label .org-label-text {
+  color: #ffffff;
 }
 
 .org-selector {
@@ -515,8 +697,15 @@ html.dark .stat-card {
       height: 8px;
       border-radius: 50%;
 
-      &.status-online {
+      &.status-online,
+      &.status-active {
         background: #14c6cb;
+      }
+
+      &.status-installing_agent,
+      &.status-provisioning {
+        background: #bb5a00;
+        animation: pulse 1.5s ease-in-out infinite;
       }
 
       &.status-offline {
@@ -546,6 +735,17 @@ html.dark .stat-card {
 
 html.dark .servers-table .server-name-cell .hostname-text {
   color: #ffffff;
+}
+
+.add-form-hint {
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+  color: #656a76;
+  line-height: 1.4;
+}
+
+html.dark .add-form-hint {
+  color: #b2b6bd;
 }
 
 @keyframes pulse {

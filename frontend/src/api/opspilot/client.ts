@@ -7,12 +7,29 @@ import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } f
 import { ElMessage } from 'element-plus'
 import { useOpsPilotAuthStore } from '@/stores/modules/opspilot'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:9000'
+/**
+ * VITE_API_URL must be the API **origin** only (e.g. http://127.0.0.1:8000).
+ * Strips trailing slashes and accidental `/api` or `/api/v1` suffixes so requests stay `/api/v1/...`.
+ */
+function normalizeApiOrigin(raw: string): string {
+  let u = raw.trim().replace(/\/+$/, '')
+  const lower = u.toLowerCase()
+  if (lower.endsWith('/api/v1')) {
+    u = u.slice(0, -'/api/v1'.length)
+  } else if (lower.endsWith('/api')) {
+    u = u.slice(0, -'/api'.length)
+  }
+  return u.replace(/\/+$/, '')
+}
+
+const API_BASE_URL = normalizeApiOrigin(
+  (import.meta.env.VITE_API_URL as string | undefined) || 'http://127.0.0.1:8000',
+)
 const API_VERSION = 'v1'
 const BASE_URL = `${API_BASE_URL}/api/${API_VERSION}`
 
 // Request config interface
-interface CustomAxiosRequestConfig extends AxiosRequestConfig {
+export interface CustomAxiosRequestConfig extends AxiosRequestConfig {
   skipAuth?: boolean
   skipRefresh?: boolean
 }

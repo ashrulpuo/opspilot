@@ -74,10 +74,6 @@ logs/
 *.sqlite
 *.sqlite3
 
-# Alembic
-alembic/versions/*.py
-!alembic/versions/__init__.py
-
 # Celery
 celerybeat-schedule
 celerybeat.pid

@@ -10,13 +10,14 @@ const i18n = createI18n({
   messages: { en },
 })
 
-const { availableLocales, t } = i18n.global
+const { t } = i18n.global
 
 export const localeMapping = {
   en: 'English',
 } as const
 
-for (const locale of availableLocales) {
+const messageLocales = Object.keys(i18n.global.messages as Record<string, unknown>)
+for (const locale of messageLocales) {
   if (!localeMapping[locale as keyof typeof localeMapping]) {
     // eslint-disable-next-line no-console
     console.warn(t(`error.localeNotSupported`, { locale }))

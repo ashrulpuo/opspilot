@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-# 添加必要的权限
 permissions:
   contents: read
   pages: write
@@ -15,7 +14,6 @@ permissions:
   pull-requests: write
   actions: read
 
-# 允许一个并发部署
 concurrency:
   group: 'pages'
   cancel-in-progress: false
@@ -109,19 +107,18 @@ jobs:
                   issue_number: context.issue.number,
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  body: `✅ 构建成功！\n\n📦 构建产物大小: ${sizeInMB} MB\n🔗 构建时间: ${new Date().toISOString()}`
+                  body: `Build succeeded.\n\nDist size: ${sizeInMB} MB\nTime: ${new Date().toISOString()}`
                 });
               } else {
                 await github.rest.issues.createComment({
                   issue_number: context.issue.number,
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  body: `⚠️ 构建完成但未找到构建产物\n\n🔗 构建时间: ${new Date().toISOString()}`
+                  body: `Build finished but dist/ was not found.\n\nTime: ${new Date().toISOString()}`
                 });
               }
             } catch (error) {
-              console.error('创建评论时出错:', error.message);
-              // 不抛出错误，避免整个工作流失败
+              console.error('Comment error:', error.message);
             }
 
   deploy:
@@ -156,6 +153,6 @@ jobs:
 
       - name: Success message
         run: |
-          echo "✅ 部署成功！"
-          echo "📱 地址: https://geeker-admin.maicss.com"
-          echo "🔗 部署时间: $(date)"
+          echo "Deploy succeeded."
+          echo "URL: https://geeker-admin.maicss.com"
+          echo "Time: $(date)"

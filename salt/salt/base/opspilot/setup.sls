@@ -52,22 +52,21 @@ opspilot-agent:
     - group: opspilot
     - mode: '0755'
 
-# Configure OpsPilot agent
+# Configure OpsPilot agent (JSON for push agent)
 opspilot-config:
   file.managed:
-    - name: /opt/opspilot/config/agent.yaml
-    - source: salt://opspilot/agent.yaml
+    - name: /opt/opspilot/config/agent.json
+    - source: salt://opspilot/agent.json.jinja
     - user: opspilot
     - group: opspilot
     - mode: '0644'
     - template: jinja
     - context:
-      api_url: {{ opspilot_config.get('api_url', 'http://localhost:9000/api/v1') }}
+      api_base_url: {{ opspilot_config.get('api_base_url', opspilot_config.get('api_url', 'http://127.0.0.1:8000/api/v1')) }}
       api_key: {{ opspilot_config.get('api_key') }}
-      minion_id: {{ grains['minion_id'] }}
+      server_id: {{ opspilot_config.get('server_id', '') }}
       organization_id: {{ opspilot_config.get('organization_id') }}
-      metrics_interval: {{ opspilot_config.get('metrics_interval', 60) }}
-      log_level: {{ opspilot_config.get('log_level', 'INFO') }}
+      interval_seconds: {{ opspilot_config.get('metrics_interval', 60) }}
 
 # Configure OpsPilot systemd service
 opspilot-service:
@@ -75,9 +74,6 @@ opspilot-service:
     - name: /etc/systemd/system/opspilot-agent.service
     - source: salt://opspilot/opspilot-agent.service
     - mode: '0644'
-    - template: jinja
-    - context:
-      install_dir: /opt/opspilot
 
   cmd.run:
     - name: reload systemd

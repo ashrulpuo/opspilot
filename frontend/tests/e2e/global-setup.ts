@@ -2,8 +2,28 @@ import { chromium, FullConfig } from '@playwright/test';
 
 async function globalSetup(config: FullConfig) {
   console.log('🚀 Starting E2E test setup...');
-  
-  const baseURL = config.projects?.[0]?.use?.baseURL || 'http://localhost:5173';
+
+  const apiBase = process.env.E2E_API_URL || 'http://127.0.0.1:8000'
+  if (process.env.E2E_WAIT_FOR_API === '1') {
+    console.log(`⏳ Waiting for backend API at ${apiBase}/health ...`)
+    for (let i = 0; i < 45; i++) {
+      try {
+        const res = await fetch(`${apiBase.replace(/\/$/, '')}/health`)
+        if (res.ok) {
+          console.log('✅ Backend API is ready')
+          break
+        }
+      } catch {
+        /* retry */
+      }
+      if (i === 44) {
+        throw new Error(`Backend API not reachable at ${apiBase} after 45 attempts`)
+      }
+      await new Promise(r => setTimeout(r, 1000))
+    }
+  }
+
+  const baseURL = config.projects?.[0]?.use?.baseURL || 'http://localhost:8848';
   
   // Wait for server to be ready
   console.log(`⏳ Waiting for server at ${baseURL}...`);

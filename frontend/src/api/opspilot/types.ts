@@ -42,6 +42,16 @@ export interface RegisterRequest {
   email: string
   password: string
   confirm_password: string
+  full_name: string
+}
+
+/** First-admin fresh install (optional org display name). */
+export interface BootstrapRequest extends RegisterRequest {
+  organization_name?: string
+}
+
+export interface SetupRequiredResponse {
+  setup_required: boolean
 }
 
 export interface ForgotPasswordRequest {
@@ -55,9 +65,14 @@ export interface ResetPasswordRequest {
 
 export interface LoginResponse {
   access_token: string
-  refresh_token: string
-  token_type: string
-  expires_in: number
+  token_type?: string
+  user?: {
+    id: string
+    email: string
+    full_name: string
+  }
+  refresh_token?: string
+  expires_in?: number
 }
 
 export interface RefreshTokenResponse {
@@ -114,6 +129,7 @@ export interface CreateOrganizationRequest {
 
 export interface UpdateOrganizationRequest {
   name?: string
+  slug?: string
   description?: string
   logo_url?: string
 }
@@ -131,8 +147,16 @@ export interface Server {
   web_server_type?: string
   domain_name?: string
   status: string
+  /** True when SSH username + encrypted password are saved (password never returned in API). */
+  has_ssh_credentials?: boolean
   created_at: string
   updated_at: string
+}
+
+export interface ServerSshInstallCredentials {
+  username: string
+  password: string
+  port?: number
 }
 
 export interface CreateServerRequest {
@@ -141,6 +165,9 @@ export interface CreateServerRequest {
   os_type: string
   domain_name?: string
   web_server_type?: string
+  /** When true (linux only), backend SSH-installs the push agent; requires `ssh`. */
+  auto_install_agent?: boolean
+  ssh?: ServerSshInstallCredentials
 }
 
 export interface UpdateServerRequest {

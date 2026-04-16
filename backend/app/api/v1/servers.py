@@ -1,14 +1,24 @@
 """Server management API endpoints for OpsPilot."""
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.models.server import Server as ServerRow
 from app.services.server_service import server_service
+from app.services.background_agent_install import schedule_agent_install
 
 router = APIRouter()
+
+
+class ServerSshInstallCredentials(BaseModel):
+    """SSH credentials for auto-install and for future OpsPilot-initiated SSH (password encrypted at rest)."""
+
+    username: str
+    password: str
+    port: int = Field(default=22, ge=1, le=65535)
 
 
 # Request Schemas
@@ -20,6 +30,17 @@ class ServerCreateRequest(BaseModel):
     os_type: str
     domain_name: Optional[str] = None
     web_server_type: Optional[str] = None
+    auto_install_agent: bool = False
+    ssh: Optional[ServerSshInstallCredentials] = None
+
+    @model_validator(mode="after")
+    def _validate_auto_install(self) -> "ServerCreateRequest":
+        if self.auto_install_agent:
+            if self.os_type != "linux":
+                raise ValueError("auto_install_agent is only supported when os_type is linux")
+            if self.ssh is None:
+                raise ValueError("ssh is required when auto_install_agent is true")
+        return self
 
 
 class ServerUpdateRequest(BaseModel):
@@ -51,8 +72,25 @@ class ServerResponse(BaseModel):
     web_server_type: Optional[str]
     domain_name: Optional[str]
     status: str
+    has_ssh_credentials: bool = False
     created_at: str
     updated_at: str
+
+
+def server_row_to_response(server: ServerRow) -> ServerResponse:
+    return ServerResponse(
+        id=server.id,
+        organization_id=server.organization_id,
+        hostname=server.hostname,
+        ip_address=server.ip_address,
+        os_type=server.os_type,
+        web_server_type=server.web_server_type,
+        domain_name=server.domain_name,
+        status=server.status,
+        has_ssh_credentials=bool(server.ssh_username and server.ssh_password_encrypted),
+        created_at=server.created_at.isoformat(),
+        updated_at=server.updated_at.isoformat(),
+    )
 
 
 class ServersListResponse(BaseModel):
@@ -75,6 +113,7 @@ class StateApplicationResponse(BaseModel):
 async def create_server(
     organization_id: str,
     request: ServerCreateRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -95,7 +134,7 @@ async def create_server(
     user_id = current_user["id"]
 
     try:
-        server = await server_service.create_server(
+        outcome = await server_service.create_server(
             db=db,
             organization_id=organization_id,
             user_id=user_id,
@@ -104,19 +143,24 @@ async def create_server(
             os_type=request.os_type,
             domain_name=request.domain_name,
             web_server_type=request.web_server_type,
+            auto_install_agent=request.auto_install_agent,
+            ssh_username=request.ssh.username if request.ssh else None,
+            ssh_password=request.ssh.password if request.ssh else None,
+            ssh_port=request.ssh.port if request.ssh else 22,
         )
-        return ServerResponse(
-            id=server.id,
-            organization_id=server.organization_id,
-            hostname=server.hostname,
-            ip_address=server.ip_address,
-            os_type=server.os_type,
-            web_server_type=server.web_server_type,
-            domain_name=server.domain_name,
-            status=server.status,
-            created_at=server.created_at.isoformat(),
-            updated_at=server.updated_at.isoformat(),
-        )
+        server = outcome.server
+        if outcome.auto_install:
+            background_tasks.add_task(
+                schedule_agent_install,
+                server_id=server.id,
+                organization_id=server.organization_id,
+                ip_address=server.ip_address,
+                agent_api_key=outcome.agent_api_key_plaintext,
+                ssh_username=outcome.auto_install.username,
+                ssh_password=outcome.auto_install.password,
+                ssh_port=outcome.auto_install.port,
+            )
+        return server_row_to_response(server)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -164,21 +208,7 @@ async def list_servers(
         )
         return ServersListResponse(
             total=len(servers),
-            servers=[
-                ServerResponse(
-                    id=server.id,
-                    organization_id=server.organization_id,
-                    hostname=server.hostname,
-                    ip_address=server.ip_address,
-                    os_type=server.os_type,
-                    web_server_type=server.web_server_type,
-                    domain_name=server.domain_name,
-                    status=server.status,
-                    created_at=server.created_at.isoformat(),
-                    updated_at=server.updated_at.isoformat(),
-                )
-                for server in servers
-            ],
+            servers=[server_row_to_response(server) for server in servers],
         )
     except ValueError as e:
         raise HTTPException(
@@ -216,18 +246,7 @@ async def get_server(
             detail="Server not found",
         )
 
-    return ServerResponse(
-        id=server.id,
-        organization_id=server.organization_id,
-        hostname=server.hostname,
-        ip_address=server.ip_address,
-        os_type=server.os_type,
-        web_server_type=server.web_server_type,
-        domain_name=server.domain_name,
-        status=server.status,
-        created_at=server.created_at.isoformat(),
-        updated_at=server.updated_at.isoformat(),
-    )
+    return server_row_to_response(server)
 
 
 @router.put("/servers/{server_id}", response_model=ServerResponse)
@@ -266,18 +285,7 @@ async def update_server(
             detail="Server not found",
         )
 
-    return ServerResponse(
-        id=server.id,
-        organization_id=server.organization_id,
-        hostname=server.hostname,
-        ip_address=server.ip_address,
-        os_type=server.os_type,
-        web_server_type=server.web_server_type,
-        domain_name=server.domain_name,
-        status=server.status,
-        created_at=server.created_at.isoformat(),
-        updated_at=server.updated_at.isoformat(),
-    )
+    return server_row_to_response(server)
 
 
 @router.delete("/servers/{server_id}", status_code=status.HTTP_204_NO_CONTENT)

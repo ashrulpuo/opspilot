@@ -4,7 +4,10 @@
  */
 
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { useOpsPilotAuthStore } from '@/stores/modules/opspilot'
+import type { RouteRecordRaw } from 'vue-router'
+
+import { mainLayoutChildren } from './main-layout-routes'
+import { useOpsPilotAuthStore, useOpsPilotOrganizationStore } from '@/stores/modules/opspilot'
 import { ElMessage } from 'element-plus'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
@@ -15,39 +18,36 @@ NProgress.configure({
   trickleSpeed: 200,
 })
 
-// Route meta interface
-interface RouteMeta {
-  title?: string
-  requiresAuth?: boolean
-  layout?: string
-  hidden?: boolean
-  icon?: string
-  activeMenu?: string
-  isAffix?: boolean
-  isKeepAlive?: boolean
-  isFull?: boolean
-}
-
 // ============================================
 // Route definitions
 // ============================================
 
-// Onboarding routes (public)
-export const onboardingRoutes = [
+// Onboarding (authenticated first-time setup only)
+export const onboardingRoutes: RouteRecordRaw[] = [
   {
     path: '/onboarding',
     name: 'Onboarding',
     component: () => import('@/views/onboarding/index.vue'),
     meta: {
       title: 'Get Started',
-      requiresAuth: false,
+      requiresAuth: true,
       hidden: true,
-    } as RouteMeta,
+    },
   },
 ]
 
 // Auth routes (public)
-export const authRoutes = [
+export const authRoutes: RouteRecordRaw[] = [
+  {
+    path: '/setup',
+    name: 'Setup',
+    component: () => import('@/views/setup/index.vue'),
+    meta: {
+      title: 'Initial setup',
+      requiresAuth: false,
+      hidden: true,
+    },
+  },
   {
     path: '/login',
     name: 'Login',
@@ -56,17 +56,16 @@ export const authRoutes = [
       title: 'Login',
       requiresAuth: false,
       hidden: true,
-    } as RouteMeta,
+    },
   },
   {
     path: '/register',
-    name: 'Register',
-    component: () => import('@/views/auth/register/index.vue'),
+    redirect: '/login',
     meta: {
       title: 'Register',
       requiresAuth: false,
       hidden: true,
-    } as RouteMeta,
+    },
   },
   {
     path: '/forgot-password',
@@ -76,135 +75,12 @@ export const authRoutes = [
       title: 'Forgot Password',
       requiresAuth: false,
       hidden: true,
-    } as RouteMeta,
-  },
-]
-
-// Dashboard routes (protected)
-export const dashboardRoutes = [
-  {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('@/views/dashboard/index.vue'),
-    meta: {
-      title: 'Dashboard',
-      requiresAuth: true,
-      icon: 'Dashboard',
-      isAffix: true,
-      isKeepAlive: true,
-    } as RouteMeta,
-  },
-]
-
-// Server routes (protected)
-export const serverRoutes = [
-  {
-    path: '/servers',
-    name: 'Servers',
-    component: () => import('@/views/servers/index.vue'),
-    meta: {
-      title: 'Servers',
-      requiresAuth: true,
-      icon: 'Monitor',
-      isKeepAlive: true,
-    } as RouteMeta,
-  },
-  {
-    path: '/servers/:id',
-    name: 'ServerDetail',
-    component: () => import('@/views/servers/detail/index.vue'),
-    meta: {
-      title: 'Server Detail',
-      requiresAuth: true,
-      activeMenu: '/servers',
-      hidden: true,
-    } as RouteMeta,
-  },
-]
-
-// Alert routes (protected)
-export const alertRoutes = [
-  {
-    path: '/alerts',
-    name: 'Alerts',
-    component: () => import('@/views/alerts/index.vue'),
-    meta: {
-      title: 'Alerts',
-      requiresAuth: true,
-      icon: 'Bell',
-      isKeepAlive: true,
-    } as RouteMeta,
-  },
-]
-
-// Deployment routes (protected)
-export const deploymentRoutes = [
-  {
-    path: '/deployments',
-    name: 'Deployments',
-    component: () => import('@/views/deployments/index.vue'),
-    meta: {
-      title: 'Deployments',
-      requiresAuth: true,
-      icon: 'Promotion',
-      isKeepAlive: true,
-    } as RouteMeta,
-  },
-]
-
-// Organization routes (protected)
-export const organizationRoutes = [
-  {
-    path: '/organizations',
-    name: 'Organizations',
-    component: () => import('@/views/organizations/index.vue'),
-    meta: {
-      title: 'Organizations',
-      requiresAuth: true,
-      icon: 'OfficeBuilding',
-      isKeepAlive: true,
-    } as RouteMeta,
-  },
-  {
-    path: '/organizations/:id',
-    name: 'OrganizationDetail',
-    component: () => import('@/views/organizations/detail/index.vue'),
-    meta: {
-      title: 'Organization Detail',
-      requiresAuth: true,
-      activeMenu: '/organizations',
-      hidden: true,
-    } as RouteMeta,
-  },
-  {
-    path: '/organizations/:id/settings',
-    name: 'OrganizationSettings',
-    component: () => import('@/views/organizations/settings/index.vue'),
-    meta: {
-      title: 'Organization Settings',
-      requiresAuth: true,
-      activeMenu: '/organizations',
-      hidden: true,
-    } as RouteMeta,
-  },
-]
-
-// Settings routes (protected)
-export const settingsRoutes = [
-  {
-    path: '/settings',
-    name: 'Settings',
-    component: () => import('@/views/settings/index.vue'),
-    meta: {
-      title: 'Settings',
-      requiresAuth: true,
-      icon: 'Setting',
-    } as RouteMeta,
+    },
   },
 ]
 
 // Error routes
-export const errorRoutes = [
+export const errorRoutes: RouteRecordRaw[] = [
   {
     path: '/404',
     name: '404',
@@ -213,7 +89,7 @@ export const errorRoutes = [
       title: '404 Not Found',
       requiresAuth: false,
       hidden: true,
-    } as RouteMeta,
+    },
   },
   {
     path: '/500',
@@ -223,33 +99,34 @@ export const errorRoutes = [
       title: '500 Server Error',
       requiresAuth: false,
       hidden: true,
-    } as RouteMeta,
+    },
   },
 ]
 
-// Combine all routes
-const routes = [
-  {
-    path: '/',
-    redirect: '/dashboard',
-    meta: {
-      hidden: true,
-    } as RouteMeta,
+/** Shell layout: top navigation + main content (nested paths under `/`). */
+const mainLayoutRoute: RouteRecordRaw = {
+  path: '/',
+  component: () => import('@/layouts/OpsPilotMainLayout.vue'),
+  redirect: '/dashboard',
+  meta: {
+    requiresAuth: true,
+    hidden: true,
   },
+  children: mainLayoutChildren,
+}
+
+// Combine all routes
+const routes: RouteRecordRaw[] = [
   ...authRoutes,
-  ...dashboardRoutes,
-  ...serverRoutes,
-  ...alertRoutes,
-  ...deploymentRoutes,
-  ...organizationRoutes,
-  ...settingsRoutes,
+  ...onboardingRoutes,
+  mainLayoutRoute,
   ...errorRoutes,
   {
     path: '/:pathMatch(.*)*',
     redirect: '/404',
     meta: {
       hidden: true,
-    } as RouteMeta,
+    },
   },
 ]
 
@@ -281,11 +158,30 @@ router.beforeEach(async (to, from, next) => {
   // Get auth store
   const authStore = useOpsPilotAuthStore()
 
-  // Check if route requires authentication
-  const requiresAuth = to.meta.requiresAuth !== false
+  // Fresh install: force first-admin wizard until a user exists
+  if (authStore.setupRequired === null) {
+    try {
+      await authStore.loadSetupRequired()
+    } catch (err) {
+      // Do not assume setup is done on network/CORS/5xx — that hides the wizard entirely.
+      console.error('GET /auth/setup-required failed:', err)
+      authStore.$patch({ setupRequired: true })
+    }
+  }
+  const needsSetup = authStore.setupRequired === true
+  const isSetupRoute = to.name === 'Setup'
+  if (needsSetup && !isSetupRoute) {
+    return next({ path: '/setup', replace: true })
+  }
+  if (!needsSetup && isSetupRoute) {
+    return next({ path: '/login', replace: true })
+  }
 
-  // If accessing login/register page and already authenticated, redirect to dashboard
-  if (['Login', 'Register'].includes(to.name as string) && authStore.isAuth) {
+  // Only protect routes that explicitly set requiresAuth: true (default is public)
+  const requiresAuth = to.meta.requiresAuth === true
+
+  // If accessing login page and already authenticated, redirect to dashboard
+  if (to.name === 'Login' && authStore.isAuth) {
     ElMessage.info('You are already logged in')
     return next('/dashboard')
   }
@@ -307,6 +203,22 @@ router.beforeEach(async (to, from, next) => {
       console.error('Failed to refresh user:', error)
       authStore.clearAuth()
       return next('/login')
+    }
+  }
+
+  // Organization context: load memberships and send users without any org to onboarding
+  if (requiresAuth && authStore.isAuth) {
+    const skipOrgGate = to.name === 'Onboarding' || to.name === 'Setup'
+    if (!skipOrgGate) {
+      const orgStore = useOpsPilotOrganizationStore()
+      try {
+        await orgStore.fetchOrganizations()
+      } catch (err) {
+        console.error('Failed to load organizations:', err)
+      }
+      if (orgStore.organizations.length === 0) {
+        return next({ path: '/onboarding', replace: true })
+      }
     }
   }
 
@@ -345,9 +257,9 @@ router.onError(error => {
 /**
  * Get all routes for menu generation
  */
-export const getMenuRoutes = () => {
-  return routes.filter(
-    route => !route.meta?.hidden && route.meta?.requiresAuth !== false && route.name && typeof route.name === 'string'
+export const getMenuRoutes = (): RouteRecordRaw[] => {
+  return mainLayoutChildren.filter(
+    route => !route.meta?.hidden && route.meta?.requiresAuth !== false && route.name && typeof route.name === 'string',
   )
 }
 
