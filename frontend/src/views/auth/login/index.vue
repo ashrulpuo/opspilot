@@ -75,11 +75,6 @@
           <el-button type="primary" size="large" class="login-button" :loading="loading" @click="handleLogin">
             {{ loading ? 'Signing in...' : 'Sign in' }}
           </el-button>
-
-          <div class="form-footer setup-hint">
-            <span class="footer-text">New installation?</span>
-            <router-link to="/setup" class="register-link">One-time initial setup</router-link>
-          </div>
         </el-form>
       </div>
     </div>
@@ -308,29 +303,6 @@ const handleLogin = async () => {
         border-color: rgba(178, 182, 189, 0.4);
       }
     }
-
-    .form-footer {
-      margin-top: 24px;
-      text-align: center;
-
-      .footer-text {
-        font-size: 0.875rem;
-        color: #656a76;
-        margin-right: 8px;
-      }
-
-      .register-link {
-        font-size: 0.875rem;
-        color: #2264d6;
-        text-decoration: none;
-        font-weight: 500;
-
-        &:hover {
-          color: #2b89ff;
-          text-decoration: underline;
-        }
-      }
-    }
   }
 }
 
@@ -350,12 +322,6 @@ html.dark .login-container {
 
       .form-subtitle {
         color: #d5d7db;
-      }
-    }
-
-    .form-footer {
-      .footer-text {
-        color: #b2b6bd;
       }
     }
   }

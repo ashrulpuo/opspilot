@@ -75,6 +75,7 @@ class ServerResponse(BaseModel):
     has_ssh_credentials: bool = False
     created_at: str
     updated_at: str
+    agent_last_seen_at: Optional[str] = None
 
 
 def server_row_to_response(server: ServerRow) -> ServerResponse:
@@ -90,6 +91,7 @@ def server_row_to_response(server: ServerRow) -> ServerResponse:
         has_ssh_credentials=bool(server.ssh_username and server.ssh_password_encrypted),
         created_at=server.created_at.isoformat(),
         updated_at=server.updated_at.isoformat(),
+        agent_last_seen_at=server.agent_last_seen_at.isoformat() if server.agent_last_seen_at else None,
     )
 
 

@@ -1,4 +1,5 @@
 """Dashboard API endpoints for OpsPilot."""
+import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -11,8 +12,10 @@ from app.models.server import Server
 from app.models.organization import Organization, OrganizationMember
 from app.models.metrics import Metric
 from app.models.alert import Alert
+from app.services.server_service import server_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def _latest_metric_values(db: AsyncSession, server_id: str) -> Dict[str, float]:
@@ -28,6 +31,44 @@ async def _latest_metric_values(db: AsyncSession, server_id: str) -> Dict[str, f
         if name not in latest:
             latest[name] = float(value or 0.0)
     return latest
+
+
+def _normalized_health_metrics(raw: Dict[str, Any]) -> Dict[str, float]:
+    """Map push-agent payloads and Salt-style dicts to keys used by ServerHealthOverview."""
+
+    def f(key: str, default: float = 0.0) -> float:
+        v = raw.get(key)
+        if v is None:
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    if not raw:
+        return {}
+    out: Dict[str, float] = {}
+    if "cpu_percent" in raw:
+        out["cpu_percent"] = f("cpu_percent")
+    elif "cpu_usage" in raw:
+        out["cpu_percent"] = f("cpu_usage")
+    elif "loadavg_1m" in raw:
+        # Agent only sends load average; rough visual until CPU % is collected.
+        load = f("loadavg_1m", 0.0)
+        out["cpu_percent"] = min(max(load * 25.0, 0.0), 100.0)
+    if "memory_percent" in raw:
+        out["memory_percent"] = f("memory_percent")
+    elif "memory_used_percent" in raw:
+        out["memory_percent"] = f("memory_used_percent")
+    elif "memory_usage" in raw:
+        out["memory_percent"] = f("memory_usage")
+    for k in ("disk_usage_percent", "disk_usage"):
+        if k in raw:
+            out["disk_usage_percent"] = f(k)
+            break
+    if "uptime_seconds" in raw:
+        out["uptime_seconds"] = f("uptime_seconds")
+    return out
 
 
 def _metric_float(metrics: Dict[str, float], *names: str) -> float:
@@ -181,7 +222,17 @@ async def get_server_health(
 
     health_overview: List[ServerHealthOverview] = []
     for server in servers:
-        by_name = await _latest_metric_values(db, server.id)
+        # Prefer unified path (push samples + Salt collect); fallback to legacy Metric rows only.
+        by_name: Dict[str, float] = {}
+        try:
+            raw = await server_service.get_metrics_for_dashboard(db, server.id, user_id)
+            if isinstance(raw, dict) and raw:
+                by_name = _normalized_health_metrics(raw)
+        except Exception as e:
+            logger.debug("Dashboard health: unified metrics failed for %s: %s", server.id, e)
+        if not by_name:
+            by_name = await _latest_metric_values(db, server.id)
+        last_ts = server.agent_last_seen_at or server.updated_at
         health_overview.append(
             ServerHealthOverview(
                 server_id=server.id,
@@ -191,7 +242,7 @@ async def get_server_health(
                 memory_usage=_metric_float(by_name, "memory_usage", "memory_percent"),
                 disk_usage=_metric_float(by_name, "disk_usage", "disk_usage_percent"),
                 uptime=int(_metric_float(by_name, "uptime_seconds")),
-                last_seen=server.updated_at.isoformat(),
+                last_seen=last_ts.isoformat(),
             )
         )
 

@@ -4,6 +4,7 @@
  */
 
 import request from './client'
+import { sshTerminalWebSocketUrl } from './commands'
 
 export const SSHTerminalAPI = {
   /**
@@ -32,6 +33,6 @@ export const SSHTerminalAPI = {
    * Returns WebSocket URL
    */
   getTerminalWebSocketURL: (sessionId: string): string => {
-    return `/api/v1/ssh/terminal/${sessionId}`
+    return sshTerminalWebSocketUrl(sessionId)
   },
 }

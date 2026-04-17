@@ -37,6 +37,7 @@ async def mark_agent_seen(db: AsyncSession, server: Server) -> None:
         "provisioning",
         "installing_agent",
         "connecting",
+        "offline",
     ):
         server.status = "online"
     server.updated_at = datetime.utcnow()

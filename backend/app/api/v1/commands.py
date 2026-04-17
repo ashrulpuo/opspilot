@@ -131,19 +131,6 @@ async def create_ssh_session(
 
     server, org_id = server_data
 
-    # Check concurrent session limit
-    # TODO: Implement with database
-    active_count = len([
-        s for s in active_ssh_sessions.values()
-        if s["server_id"] == server_id and s["status"] == "active"
-    ])
-
-    if active_count >= 3:  # Default concurrent session limit
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Concurrent session limit reached",
-        )
-
     # Create SSH session
     import uuid
     session_id = str(uuid.uuid4())

@@ -91,16 +91,32 @@
                   </div>
                   <div class="info-item">
                     <span class="info-label">Last Seen</span>
-                    <span class="info-value">{{ formatDate(server.updated_at) }}</span>
+                    <span class="info-value">{{
+                      formatDate(server.agent_last_seen_at || server.updated_at)
+                    }}</span>
                   </div>
                 </div>
               </div>
 
               <div class="info-card hc-card">
                 <h3 class="info-title">System Resources</h3>
-                <div class="metrics-placeholder">
-                  <el-empty description="Metrics will be available when server comes online" />
+                <div v-if="metricsLoading" class="metrics-placeholder">
+                  <el-skeleton :rows="4" animated />
                 </div>
+                <div v-else-if="!metricDisplayRows.length" class="metrics-placeholder">
+                  <el-empty
+                    description="No metrics yet. Run the push agent on the server (POST /api/v1/servers/{id}/metrics) or configure Salt metrics."
+                  />
+                </div>
+                <el-descriptions v-else :column="1" border size="small" class="metrics-descriptions">
+                  <el-descriptions-item
+                    v-for="row in metricDisplayRows"
+                    :key="row.key"
+                    :label="row.label"
+                  >
+                    {{ row.value }}
+                  </el-descriptions-item>
+                </el-descriptions>
               </div>
             </div>
           </div>
@@ -109,7 +125,7 @@
         <!-- SSH Terminal Tab -->
         <el-tab-pane label="SSH Terminal" name="ssh">
           <div class="ssh-section">
-            <div v-if="!sshConnected" class="ssh-connect-section">
+            <div v-if="!sshSessionId" class="ssh-connect-section">
               <div class="ssh-placeholder">
                 <el-icon class="ssh-icon"><Monitor /></el-icon>
                 <h3>SSH Terminal</h3>
@@ -127,7 +143,9 @@
                   <el-icon><VideoPause /></el-icon>
                   Disconnect
                 </el-button>
-                <span class="session-info">Connected to {{ server.hostname }}</span>
+                <span class="session-info">
+                  {{ sshWsReady ? 'Connected to' : 'Connecting…' }} {{ server.hostname }}
+                </span>
               </div>
               <!-- xterm.js terminal container -->
               <div ref="terminalRef" class="xterm-terminal"></div>
@@ -186,12 +204,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { Terminal } from 'xterm'
+import { FitAddon } from 'xterm-addon-fit'
+import 'xterm/css/xterm.css'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Monitor, Edit, Delete, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { ServersAPI } from '@/api/opspilot/servers'
 import { SSHTerminalAPI } from '@/api/opspilot/commands'
+import { MetricsAPI } from '@/api/opspilot/metrics'
 import { useOpsPilotOrganizationStore } from '@/stores/modules/opspilot'
 
 const route = useRoute()
@@ -203,6 +225,61 @@ const activeTab = ref((route.query.tab as string) || 'overview')
 
 const loading = ref(true)
 const server = ref<any>(null)
+
+const metricsLoading = ref(false)
+const latestMetrics = ref<Record<string, unknown>>({})
+
+/** Human-readable rows from API payload (push agent + Salt shapes). */
+const metricDisplayRows = computed(() => {
+  const m = latestMetrics.value
+  const rows: { key: string; label: string; value: string }[] = []
+  const num = (v: unknown): number => {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : 0
+  }
+  const pct = (v: unknown) => `${num(v).toFixed(1)}%`
+  if (m.cpu_percent != null) rows.push({ key: 'cpu_percent', label: 'CPU usage', value: pct(m.cpu_percent) })
+  if (m.loadavg_1m != null && m.cpu_percent == null)
+    rows.push({ key: 'loadavg_1m', label: 'Load average (1m)', value: String(num(m.loadavg_1m)) })
+  const mem =
+    m.memory_used_percent != null
+      ? m.memory_used_percent
+      : m.memory_percent != null
+        ? m.memory_percent
+        : m.memory_usage != null
+          ? m.memory_usage
+          : null
+  if (mem != null) rows.push({ key: 'memory', label: 'Memory used', value: pct(mem) })
+  const disk = m.disk_usage_percent != null ? m.disk_usage_percent : m.disk_usage
+  if (disk != null) rows.push({ key: 'disk', label: 'Disk used', value: pct(disk) })
+  if (m.uptime_seconds != null) {
+    const s = Math.floor(num(m.uptime_seconds))
+    const d = Math.floor(s / 86400)
+    const h = Math.floor((s % 86400) / 3600)
+    const mm = Math.floor((s % 3600) / 60)
+    rows.push({
+      key: 'uptime',
+      label: 'Uptime',
+      value: d > 0 ? `${d}d ${h}h ${mm}m` : `${h}h ${mm}m`,
+    })
+  }
+  if (m.source != null) rows.push({ key: 'source', label: 'Source', value: String(m.source) })
+  return rows
+})
+
+const loadMetrics = async () => {
+  if (!serverId) return
+  try {
+    metricsLoading.value = true
+    const res = await MetricsAPI.getServerMetrics(serverId)
+    const raw = res?.metrics
+    latestMetrics.value = raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...raw } : {}
+  } catch {
+    latestMetrics.value = {}
+  } finally {
+    metricsLoading.value = false
+  }
+}
 const organizationName = computed(() => {
   const id = server.value?.organization_id as string | undefined
   if (!id) return ''
@@ -212,11 +289,56 @@ const showEditDialog = ref(false)
 const editFormRef = ref()
 
 const sshConnecting = ref(false)
-const sshConnected = ref(false)
+/** WebSocket open — shell I/O is live (backend may still be a stub). */
+const sshWsReady = ref(false)
 const sshSessionId = ref<string>()
 const terminalRef = ref<HTMLDivElement>()
 const ws = ref<WebSocket>()
-const xterm = ref<any>()
+
+let sshTerm: Terminal | null = null
+let sshFitAddon: FitAddon | null = null
+
+function disposeSshTerminal() {
+  sshTerm?.dispose()
+  sshTerm = null
+  sshFitAddon = null
+}
+
+function fitSshTerminal() {
+  try {
+    sshFitAddon?.fit()
+  } catch {
+    /* ignore */
+  }
+}
+
+function mountSshTerminal() {
+  disposeSshTerminal()
+  const el = terminalRef.value
+  if (!el) return
+
+  sshTerm = new Terminal({
+    cursorBlink: true,
+    fontSize: 14,
+    convertEol: true,
+    fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
+    theme: {
+      background: '#1e1e1e',
+      foreground: '#d4d4d4',
+      cursor: '#aeafad',
+    },
+  })
+  sshFitAddon = new FitAddon()
+  sshTerm.loadAddon(sshFitAddon)
+  sshTerm.open(el)
+  sshFitAddon.fit()
+
+  sshTerm.onData(data => {
+    if (ws.value?.readyState === WebSocket.OPEN) {
+      ws.value.send(data)
+    }
+  })
+}
 
 const editForm = reactive({
   hostname: '',
@@ -271,100 +393,93 @@ const handleSSH = () => {
 const handleSSHConnect = async () => {
   try {
     sshConnecting.value = true
+    sshWsReady.value = false
 
-    // Create SSH session
     const session = await SSHTerminalAPI.createSession(serverId)
     sshSessionId.value = session.session_id
 
-    ElMessage.success('SSH session created')
+    await nextTick()
+    mountSshTerminal()
 
-    // Initialize xterm.js
-    // TODO: Install xterm.js: npm install xterm xterm-addon-fit xterm-addon-web-links
-    // const { Terminal } = await import('xterm');
-    // const { FitAddon } = await import('xterm-addon-fit');
-
-    // const term = new Terminal({
-    //   cursorBlink: true,
-    //   theme: {
-    //     background: '#000000',
-    //     foreground: '#ffffff',
-    //   },
-    // });
-
-    // const fitAddon = new FitAddon();
-    // term.loadAddon(fitAddon);
-
-    // if (terminalRef.value) {
-    //   term.open(terminalRef.value);
-    //   fitAddon.fit();
-    // }
-
-    // Connect to WebSocket
     ws.value = SSHTerminalAPI.connect(session.session_id)
 
     ws.value.onopen = () => {
-      console.log('SSH WebSocket connected')
-      sshConnected.value = true
+      sshWsReady.value = true
       sshConnecting.value = false
-
-      // Send resize event
-      if (terminalRef.value) {
-        const cols = Math.floor(terminalRef.value.offsetWidth / 9) // Approximate character width
-        const rows = Math.floor(terminalRef.value.offsetHeight / 18) // Approximate line height
-        ws.value?.send(JSON.stringify({ type: 'resize', rows, cols }))
+      fitSshTerminal()
+      if (sshTerm && ws.value?.readyState === WebSocket.OPEN) {
+        ws.value.send(
+          JSON.stringify({ type: 'resize', rows: sshTerm.rows, cols: sshTerm.cols }),
+        )
       }
     }
 
     ws.value.onmessage = event => {
-      const message = JSON.parse(event.data)
-      console.log('SSH WebSocket message:', message)
-
-      // TODO: Handle message types
-      // if (message.type === 'output') {
-      //   term.write(message.output);
-      // } else if (message.type === 'welcome') {
-      //   term.write(`\r\n${message.message}\r\n`);
-      //   term.write(`root@${server.value.hostname}:# `);
-      // } else if (message.type === 'error') {
-      //   term.write(`\r\n${message.message}\r\n`);
-      // }
+      const raw = typeof event.data === 'string' ? event.data : ''
+      if (!raw) return
+      try {
+        const message = JSON.parse(raw) as { type?: string; data?: string }
+        if (message.type === 'output' && message.data) {
+          sshTerm?.write(message.data)
+        } else if (message.type === 'error' && message.data) {
+          sshTerm?.writeln(`\r\n\x1b[31m${message.data}\x1b[0m`)
+        }
+      } catch {
+        sshTerm?.write(raw)
+      }
     }
 
     ws.value.onclose = () => {
-      console.log('SSH WebSocket closed')
-      sshConnected.value = false
+      sshWsReady.value = false
+      disposeSshTerminal()
+      sshSessionId.value = undefined
+      sshConnecting.value = false
     }
 
-    ws.value.onerror = error => {
-      console.error('SSH WebSocket error:', error)
+    ws.value.onerror = () => {
       ElMessage.error('SSH connection error')
-      sshConnected.value = false
+      sshWsReady.value = false
+      disposeSshTerminal()
+      sshSessionId.value = undefined
       sshConnecting.value = false
+      try {
+        ws.value?.close()
+      } catch {
+        /* ignore */
+      }
     }
   } catch (error: any) {
     console.error('SSH connect error:', error)
     ElMessage.error(error.message || 'Failed to connect to SSH')
     sshConnecting.value = false
+    sshWsReady.value = false
+    disposeSshTerminal()
+    sshSessionId.value = undefined
   }
 }
 
 const handleSSHDisconnect = async () => {
-  if (sshSessionId.value) {
-    try {
-      await SSHTerminalAPI.terminateSession(sshSessionId.value)
-      ElMessage.success('SSH session terminated')
-      sshConnected.value = false
-      sshSessionId.value = undefined
+  if (!sshSessionId.value) return
 
-      // Close WebSocket
-      if (ws.value) {
-        ws.value.close()
-        ws.value = undefined
-      }
-    } catch (error: any) {
-      console.error('SSH disconnect error:', error)
-      ElMessage.error(error.message || 'Failed to disconnect SSH')
+  const sid = sshSessionId.value
+  sshWsReady.value = false
+  disposeSshTerminal()
+  if (ws.value) {
+    try {
+      ws.value.close()
+    } catch {
+      /* ignore */
     }
+    ws.value = undefined
+  }
+  sshSessionId.value = undefined
+
+  try {
+    await SSHTerminalAPI.terminateSession(sid)
+    ElMessage.success('SSH session terminated')
+  } catch (error: any) {
+    console.error('SSH disconnect error:', error)
+    ElMessage.error(error.message || 'Failed to disconnect SSH')
   }
 }
 
@@ -382,6 +497,7 @@ const handleEditSave = async () => {
 
     // Reload server data
     await loadServer()
+    await loadMetrics()
   } catch (error: any) {
     console.error('Update server error:', error)
     ElMessage.error(error.message || 'Failed to update server')
@@ -425,26 +541,44 @@ const loadServer = async () => {
   }
 }
 
+let metricsPoll: ReturnType<typeof setInterval> | undefined
+
+watch(activeTab, tab => {
+  if (tab === 'overview' && server.value) void loadMetrics()
+})
+
 onMounted(async () => {
   await loadServer()
+  await loadMetrics()
+  metricsPoll = setInterval(() => {
+    if (server.value && activeTab.value === 'overview') void loadMetrics()
+  }, 60_000)
 
-  // Handle window resize for terminal
   window.addEventListener('resize', () => {
-    if (ws.value && terminalRef.value) {
-      const cols = Math.floor(terminalRef.value.offsetWidth / 9)
-      const rows = Math.floor(terminalRef.value.offsetHeight / 18)
-      ws.value.send(JSON.stringify({ type: 'resize', rows, cols }))
+    fitSshTerminal()
+    if (sshTerm && ws.value?.readyState === WebSocket.OPEN) {
+      ws.value.send(JSON.stringify({ type: 'resize', rows: sshTerm.rows, cols: sshTerm.cols }))
     }
   })
 })
 
 onUnmounted(() => {
-  // Cleanup WebSocket and SSH session
-  if (ws.value) {
-    ws.value.close()
+  if (metricsPoll) {
+    clearInterval(metricsPoll)
+    metricsPoll = undefined
   }
+  if (ws.value) {
+    try {
+      ws.value.close()
+    } catch {
+      /* ignore */
+    }
+    ws.value = undefined
+  }
+  disposeSshTerminal()
   if (sshSessionId.value) {
-    handleSSHDisconnect()
+    void SSHTerminalAPI.terminateSession(sshSessionId.value).catch(() => {})
+    sshSessionId.value = undefined
   }
 })
 </script>

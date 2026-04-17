@@ -114,7 +114,7 @@
 
         <el-table-column prop="updated_at" label="Last Seen" min-width="160">
           <template #default="{ row }">
-            {{ formatDate(row.updated_at) }}
+            {{ formatDate(row.agent_last_seen_at || row.updated_at) }}
           </template>
         </el-table-column>
 

@@ -151,6 +151,8 @@ export interface Server {
   has_ssh_credentials?: boolean
   created_at: string
   updated_at: string
+  /** Last successful push-agent metrics POST (ISO8601), if any. */
+  agent_last_seen_at?: string | null
 }
 
 export interface ServerSshInstallCredentials {

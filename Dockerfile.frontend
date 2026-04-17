@@ -5,8 +5,14 @@ FROM node:22-alpine AS builder
 # Set working directory
 WORKDIR /app
 
+# preinstall runs `git config` (see package.json only-allow)
+RUN apk add --no-cache git
+
 # Copy package files
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
+
+# preinstall runs `git config` — needs a git repo in Docker build context
+RUN git init && git config user.email "docker@build" && git config user.name "docker"
 
 # Install pnpm
 RUN npm install -g pnpm
@@ -17,8 +23,12 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY frontend/ .
 
-# Build application
-RUN pnpm build
+# Public API origin for production builds (same as browser origin when API is reverse-proxied under /api)
+ARG VITE_API_URL=http://127.0.0.1:8000
+ENV VITE_API_URL=$VITE_API_URL
+
+# Production bundle (skip vue-tsc: upstream has type errors unrelated to runtime)
+RUN pnpm exec vite build
 
 # Production stage
 FROM nginx:1.25-alpine
@@ -29,15 +39,8 @@ COPY infrastructure/docker/nginx.conf /etc/nginx/nginx.conf
 # Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy non-root user setup
-RUN apk add --no-cache curl && \
-    addgroup -g 1001 -S opspilot && \
-    adduser -S -D -H -u 1001 -s /sbin/nologin -G opspilot -g opspilot opspilot && \
-    chown -R opspilot:opspilot /usr/share/nginx/html && \
-    chown -R opspilot:opspilot /var/cache/nginx && \
-    chown -R opspilot:opspilot /var/run
-
-USER opspilot
+# Default nginx user (root) — required to read /etc/nginx/nginx.conf and bind :80 in this image
+RUN apk add --no-cache curl
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

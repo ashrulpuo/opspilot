@@ -1,0 +1,30 @@
+# Standalone host Caddy — merge this site block into your main Caddyfile (the one that binds :80 / :443).
+#
+# Dev stack (docker compose --profile dev): Vite on loopback :8848, FastAPI on :8000.
+# Production stack: Nginx UI on loopback :18080 (single reverse_proxy to that port).
+{
+	email hostmaster@appfinityhub.com
+}
+
+opspilot.appfinityhub.com {
+	encode gzip
+
+	# API + docs (FastAPI)
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /docs* {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /redoc* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# Vite dev server (HMR + app)
+	handle {
+		reverse_proxy 127.0.0.1:8848
+	}
+}

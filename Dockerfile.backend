@@ -19,8 +19,10 @@ COPY pyproject.toml .
 # Install Python dependencies
 RUN pip install --no-cache-dir -e ".[dev]"
 
-# Copy application code
+# Copy application code and migrations
 COPY ./app ./app
+COPY ./alembic ./alembic
+COPY ./alembic.ini ./alembic.ini
 
 # Create non-root user
 RUN useradd -m -u 1000 opspilot && \

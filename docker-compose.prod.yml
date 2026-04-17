@@ -1,0 +1,114 @@
+# Production stack: Vue+Nginx frontend (loopback only), FastAPI backend, Postgres (Timescale), Redis, Vault (dev).
+# TLS: use standalone Caddy on the host (see deploy/Caddyfile) reverse_proxy → 127.0.0.1:18080
+#
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env up -d --build
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: https://opspilot.appfinityhub.com
+    image: opspilot-frontend:prod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18080:80"
+    depends_on:
+      opspilot-backend:
+        condition: service_healthy
+    networks:
+      - opspilot
+
+  opspilot-backend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend.rootctx
+    image: opspilot-backend:prod
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        alembic upgrade head
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      SECRET_KEY: ${SECRET_KEY}
+      SALT_API_KEY: ${SALT_API_KEY}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL}
+      app_url: ${APP_URL}
+      vault_url: ${VAULT_URL}
+      vault_token: ${VAULT_TOKEN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vault:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    networks:
+      - opspilot
+
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - opspilot
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - opspilot
+
+  vault:
+    image: hashicorp/vault:latest
+    restart: unless-stopped
+    environment:
+      SKIP_SETCAP: "true"
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - opspilot
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  opspilot:
+    driver: bridge

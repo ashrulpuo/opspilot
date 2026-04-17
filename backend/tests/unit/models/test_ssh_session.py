@@ -12,11 +12,14 @@ def test_ssh_session_tablename() -> None:
 
 
 @pytest.mark.unit
-def test_ssh_session_construct() -> None:
+def test_ssh_session_construct_minimal() -> None:
     sess = SSHSesion(
         id=str(uuid.uuid4()),
         user_id=str(uuid.uuid4()),
         server_id=str(uuid.uuid4()),
+        organization_id=str(uuid.uuid4()),
+        status="active",
     )
-    assert sess.commands is None
-    assert sess.end_time is None
+    assert sess.client_id is None
+    assert sess.terminated_at is None
+    assert sess.terminated_reason is None

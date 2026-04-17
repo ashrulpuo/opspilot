@@ -3,8 +3,19 @@
  * Command execution and SSH terminal endpoints
  */
 
-import request from '../opspilot/client'
+import request, { API_BASE_URL } from './client'
 import type { Command, SSHSession, PaginatedResponse } from './types'
+
+/** WebSocket URL for the SSH terminal (must match `app.api.v1.ssh` router). */
+export function sshTerminalWebSocketUrl(sessionId: string): string {
+  const base = API_BASE_URL.trim().replace(/\/+$/, '')
+  const wsOrigin = base.toLowerCase().startsWith('https://')
+    ? `wss://${base.slice(8)}`
+    : base.toLowerCase().startsWith('http://')
+      ? `ws://${base.slice(7)}`
+      : `ws://${base}`
+  return `${wsOrigin}/api/v1/ssh/terminal/${encodeURIComponent(sessionId)}`
+}
 
 export const CommandsAPI = {
   /**
@@ -59,17 +70,14 @@ export const SSHTerminalAPI = {
   /**
    * Terminate SSH session
    */
-  terminateSession: (sessionId: string): Promise<void> => {
-    return request.delete<void>(`/ssh/sessions/${sessionId}`)
+  terminateSession: (sessionId: string): Promise<{ message: string; session_id: string }> => {
+    return request.post<{ message: string; session_id: string }>(`/ssh/sessions/${sessionId}/terminate`)
   },
 
   /**
    * Connect to SSH WebSocket
    */
   connect: (sessionId: string): WebSocket => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host
-    const wsUrl = `${protocol}//${host}/api/v1/ssh/ws/${sessionId}`
-    return new WebSocket(wsUrl)
+    return new WebSocket(sshTerminalWebSocketUrl(sessionId))
   },
 }

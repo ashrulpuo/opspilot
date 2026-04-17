@@ -17,10 +17,13 @@ import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
 import 'xterm/css/xterm.css'
+import { sshTerminalWebSocketUrl } from '@/api/opspilot/commands'
 
 interface Props {
   serverId: string
   hostname: string
+  /** If set, WebSocket uses POST /servers/:id/ssh/sessions `session_id`. */
+  sessionId?: string
 }
 
 const props = defineProps<Props>()
@@ -87,7 +90,11 @@ function initTerminal() {
 }
 
 function connectWebSocket() {
-  const wsUrl = `ws://localhost:8000/api/v1/sessions/${props.serverId}/ssh`
+  if (!props.sessionId) {
+    if (terminal) terminal.writeln('\x1b[31mMissing sessionId — create a session first.\x1b[0m')
+    return
+  }
+  const wsUrl = sshTerminalWebSocketUrl(props.sessionId)
   socket = new WebSocket(wsUrl)
 
   socket.onopen = () => {
@@ -98,12 +105,16 @@ function connectWebSocket() {
   }
 
   socket.onmessage = event => {
-    const message = JSON.parse(event.data)
-
-    if (message.type === 'output' && terminal) {
-      terminal.write(message.data)
-    } else if (message.type === 'error' && terminal) {
-      terminal.writeln('\x1b[31mError: ' + message.data + '\x1b[0m')
+    const raw = typeof event.data === 'string' ? event.data : ''
+    try {
+      const message = JSON.parse(raw) as { type?: string; data?: string }
+      if (message.type === 'output' && message.data && terminal) {
+        terminal.write(message.data)
+      } else if (message.type === 'error' && message.data && terminal) {
+        terminal.writeln('\x1b[31mError: ' + message.data + '\x1b[0m')
+      }
+    } catch {
+      if (raw && terminal) terminal.write(raw)
     }
   }
 

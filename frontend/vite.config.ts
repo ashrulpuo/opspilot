@@ -42,14 +42,27 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
         },
       },
     },
-    server: {
-      host: '0.0.0.0',
-      port: viteEnv.VITE_PORT,
-      open: viteEnv.VITE_OPEN,
-      cors: true,
-      // Load proxy configuration from .env.development
-      proxy: createProxy(viteEnv.VITE_PROXY),
-    },
+    server: (() => {
+      const publicDevHost = (process.env.VITE_DEV_PUBLIC_HOST || '').trim()
+      const serverConfig: UserConfig['server'] = {
+        host: '0.0.0.0',
+        port: viteEnv.VITE_PORT,
+        open: viteEnv.VITE_OPEN,
+        cors: true,
+        proxy: createProxy(viteEnv.VITE_PROXY),
+      }
+      // Behind TLS reverse proxy (e.g. Caddy → Vite on loopback)
+      if (publicDevHost) {
+        serverConfig.allowedHosts = [publicDevHost]
+        serverConfig.strictPort = true
+        serverConfig.hmr = {
+          host: publicDevHost,
+          protocol: 'wss',
+          clientPort: 443,
+        }
+      }
+      return serverConfig
+    })(),
     plugins: createVitePlugins(viteEnv),
     esbuild: {
       pure: viteEnv.VITE_DROP_CONSOLE ? ['console.log'] : [],

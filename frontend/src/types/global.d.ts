@@ -32,6 +32,10 @@ declare global {
     VITE_DEVTOOLS: boolean
     VITE_PUBLIC_PATH: string
     VITE_API_URL: string
+    /** Optional; defaults from VITE_API_URL (ws/wss). */
+    VITE_WS_URL?: string
+    /** When set, Vite allows this Host and uses WSS HMR through reverse proxy :443. */
+    VITE_DEV_PUBLIC_HOST?: string
     VITE_PROXY: [string, string][]
     VITE_CODE_INSPECTOR: boolean
   }
