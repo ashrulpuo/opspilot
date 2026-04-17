@@ -6,6 +6,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.api.v1 import api_router
+from app.api.v1.stream import stream_router
+from app.api.v1.salt import salt_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -32,8 +34,10 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Register exception handlers
 register_exception_handlers(app)
 
-# Include API router
+# Include API routers
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(stream_router, prefix=settings.API_V1_STR)
+app.include_router(salt_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")
@@ -45,6 +49,7 @@ async def root():
         "api_prefix": settings.API_V1_STR,
         "docs": "/docs",
         "health": "/health",
+        "routers": ["api/v1", "stream", "salt"]
     }
 
 

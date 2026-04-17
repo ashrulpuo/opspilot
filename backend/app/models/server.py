@@ -38,6 +38,14 @@ class Server(Base):
         back_populates="server",
         cascade="all, delete-orphan",
     )
+    
+    # SaltStack relationships
+    salt_minion = relationship("SaltMinion", back_populates="server", uselist=False)
+    salt_events = relationship("SaltEvent", back_populates="server", cascade="all, delete-orphan")
+    salt_service_states = relationship("SaltServiceState", back_populates="server", cascade="all, delete-orphan")
+    salt_processes = relationship("SaltProcess", back_populates="server", cascade="all, delete-orphan")
+    salt_packages = relationship("SaltPackage", back_populates="server", cascade="all, delete-orphan")
+    salt_logs = relationship("SaltLog", back_populates="server", cascade="all, delete-orphan")
 
 
 class CredentialsVaultPath(Base):
