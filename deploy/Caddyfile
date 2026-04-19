@@ -1,7 +1,6 @@
-# Standalone host Caddy — merge this site block into your main Caddyfile (the one that binds :80 / :443).
-#
-# Dev stack (docker compose --profile dev): Vite on loopback :8848, FastAPI on :8000.
-# Production stack: Nginx UI on loopback :18080 (single reverse_proxy to that port).
+# Host Caddy terminates TLS → Docker frontend (nginx) on loopback :18080 only.
+# Backend FastAPI stays on Docker network opspilot-backend:8000 (not published on host :8000).
+# Deploy: merge this global + site block into /etc/caddy/Caddyfile, then `sudo caddy validate --config ...` and `sudo systemctl reload caddy`.
 {
 	email hostmaster@appfinityhub.com
 }
@@ -9,22 +8,11 @@
 opspilot.appfinityhub.com {
 	encode gzip
 
-	# API + docs (FastAPI)
-	handle /api/* {
-		reverse_proxy 127.0.0.1:8000
-	}
-	handle /health {
-		reverse_proxy 127.0.0.1:8000
-	}
-	handle /docs* {
-		reverse_proxy 127.0.0.1:8000
-	}
-	handle /redoc* {
-		reverse_proxy 127.0.0.1:8000
-	}
-
-	# Vite dev server (HMR + app)
-	handle {
-		reverse_proxy 127.0.0.1:8848
+	reverse_proxy 127.0.0.1:18080 {
+		transport http {
+			dial_timeout 30s
+			read_timeout 86400s
+			write_timeout 86400s
+		}
 	}
 }
