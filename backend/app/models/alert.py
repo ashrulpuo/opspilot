@@ -15,9 +15,13 @@ class Alert(Base):
     organization_id = Column(String, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
     server_id = Column(String, ForeignKey("servers.id", ondelete="SET NULL"), nullable=True)
     type = Column(String, nullable=False)  # 'cpu', 'memory', 'disk', 'response_time'
+    severity = Column(String, nullable=True, default="warning")  # 'info', 'warning', 'critical'
+    title = Column(String, nullable=True)
+    message = Column(String, nullable=True)
     threshold = Column(Float, nullable=False)
     value = Column(Float, nullable=False)
     status = Column(String, nullable=False, default="open")  # 'open', 'acknowledged', 'resolved'
+    resolved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships

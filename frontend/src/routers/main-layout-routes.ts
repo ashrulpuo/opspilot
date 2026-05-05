@@ -94,6 +94,28 @@ export const mainLayoutChildren: RouteRecordRaw[] = [
     },
   },
   {
+    path: 'monitors',
+    name: 'Monitors',
+    component: () => import('@/views/monitors/index.vue'),
+    meta: {
+      title: 'Monitors',
+      requiresAuth: true,
+      icon: 'Odometer',
+      isKeepAlive: true,
+    },
+  },
+  {
+    path: 'registry',
+    name: 'Registry',
+    component: () => import('@/views/registry/index.vue'),
+    meta: {
+      title: 'Registry',
+      requiresAuth: true,
+      icon: 'Files',
+      isKeepAlive: true,
+    },
+  },
+  {
     path: 'settings',
     name: 'Settings',
     component: () => import('@/views/settings/index.vue'),

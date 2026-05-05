@@ -7,23 +7,18 @@
           <el-col :span="16">
             <div class="salt-info-title">
               <el-icon><Coin /></el-icon>
-              <h3>Salt Minion Information</h3>
+              <h3>Agent Information</h3>
             </div>
           </el-col>
           <el-col :span="8" class="text-right">
-            <el-button 
-              type="primary" 
-              :icon="RefreshLeft" 
-              :loading="refreshing"
-              @click="refreshGrains"
-            >
+            <el-button type="primary" :icon="RefreshLeft" :loading="refreshing" @click="refreshGrains">
               Refresh Grains
             </el-button>
           </el-col>
         </el-row>
       </el-card>
     </div>
-    
+
     <!-- Minion Status -->
     <el-row :gutter="20" class="salt-info-stats">
       <el-col :span="6">
@@ -37,14 +32,12 @@
               <div :class="['stat-value', minionStatusClass]">
                 {{ minionStatus }}
               </div>
-              <div class="stat-time">
-                Last seen: {{ formatLastSeen(minion.last_seen) }}
-              </div>
+              <div class="stat-time">Last seen: {{ formatLastSeen(minion.last_seen) }}</div>
             </div>
           </div>
         </el-card>
       </el-col>
-      
+
       <el-col :span="6">
         <el-card shadow="never">
           <div class="stat-card">
@@ -56,14 +49,12 @@
               <div class="stat-value">
                 {{ formatUptime(server.uptime_seconds) }}
               </div>
-              <div class="stat-time">
-                {{ server.uptime }} (from grains)
-              </div>
+              <div class="stat-time">Live from agent metrics</div>
             </div>
           </div>
         </el-card>
       </el-col>
-      
+
       <el-col :span="6">
         <el-card shadow="never">
           <div class="stat-card">
@@ -71,19 +62,19 @@
               <el-icon :size="30"><Operation /></el-icon>
             </div>
             <div class="stat-content">
-              <div class="stat-label">Last Highstate</div>
+              <div class="stat-label">Facts Synced</div>
               <div class="stat-value">
-                {{ formatLastHighstate(minion.last_highstate) }}
+                {{ formatLastSeen(hostInfo.facts_synced_at) }}
               </div>
               <div class="stat-time">
-                {{ minion.last_highstate ? formatDateTime(minion.last_highstate) : 'Never run' }}
+                {{ hostInfo.facts_synced_at ? formatDateTime(hostInfo.facts_synced_at) : 'Redeploy agent to sync' }}
               </div>
             </div>
           </div>
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- Grains Data -->
     <el-row :gutter="20">
       <!-- System Information -->
@@ -125,7 +116,7 @@
           </el-descriptions>
         </el-card>
       </el-col>
-      
+
       <!-- Hardware Information -->
       <el-col :span="12">
         <el-card shadow="never" header="Hardware Information">
@@ -142,71 +133,48 @@
             <el-descriptions-item label="Total Memory">
               {{ formatMemory(grains.mem_total) }}
             </el-descriptions-item>
-            <el-descriptions-item label="Manufacturer">
-              {{ grains.manufacturer || '-' }}
+            <el-descriptions-item label="Virtualized">
+              <el-tag :type="grains.virtual ? 'warning' : 'success'">
+                {{ grains.virtual ? (grains.virtual_type || 'Yes') : 'Bare Metal' }}
+              </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Product Name">
-              {{ grains.productname || '-' }}
+            <el-descriptions-item label="Cloud Provider">
+              <el-tag v-if="grains.cloud_provider && grains.cloud_provider !== 'unknown'" type="info">
+                {{ grains.cloud_provider.toUpperCase() }}
+              </el-tag>
+              <span v-else>-</span>
             </el-descriptions-item>
-            <el-descriptions-item label="Serial Number">
-              <code>{{ grains.serialnumber || '-' }}</code>
+            <el-descriptions-item label="Region">
+              {{ grains.cloud_region || '-' }}
             </el-descriptions-item>
-            <el-descriptions-item label="BIOS Vendor">
-              {{ grains.biosvendor || '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="BIOS Version">
-              {{ grains.biosversion || '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="BIOS Release">
-              {{ grains.biosrelease || '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="Board Asset Tag">
-              {{ grains.board_asset_tag || '-' }}
+            <el-descriptions-item label="Instance Type">
+              <code v-if="grains.cloud_instance_type">{{ grains.cloud_instance_type }}</code>
+              <span v-else>-</span>
             </el-descriptions-item>
           </el-descriptions>
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- Storage & Network -->
     <el-row :gutter="20">
       <!-- Storage Information -->
       <el-col :span="12">
         <el-card shadow="never" header="Storage Information">
-          <el-collapse v-model="storageExpanded">
-            <el-collapse-item name="1" title="Disk Information">
-              <el-table :data="storage.disks" stripe>
-                <el-table-column prop="name" label="Disk" />
-                <el-table-column prop="type" label="Type" width="100">
-                  <template #default="{ row }">
-                    <el-tag :type="row.type === 'SSD' ? 'success' : 'primary'">
-                      {{ row.type }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="size" label="Size" width="150">
-                  <template #default="{ row }">
-                    {{ formatBytes(row.size) }}
-                  </template>
-                </el-table-column>
-                <el-table-column prop="model" label="Model" width="200">
-                  <template #default="{ row }">
-                    {{ row.model || '-' }}
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-collapse-item>
-            
+          <el-empty v-if="storage.filesystems.length === 0" description="No disk data yet — metrics not received" :image-size="60" />
+          <el-collapse v-else v-model="storageExpanded">
             <el-collapse-item name="2" title="Filesystems">
               <el-table :data="storage.filesystems" stripe>
                 <el-table-column prop="mountpoint" label="Mount Point" />
                 <el-table-column prop="fstype" label="Type" width="100">
-                  <el-tag>{{ row.fstype }}</el-tag>
+                  <template #default="{ row }">
+                    <el-tag>{{ row.fstype || '-' }}</el-tag>
+                  </template>
                 </el-table-column>
                 <el-table-column label="Usage" width="150">
                   <template #default="{ row }">
-                    <el-progress 
-                      :percentage="row.used_percent" 
+                    <el-progress
+                      :percentage="row.used_percent"
                       :color="getUsageColor(row.used_percent)"
                       :show-text="false"
                     />
@@ -233,56 +201,37 @@
           </el-collapse>
         </el-card>
       </el-col>
-      
+
       <!-- Network Information -->
       <el-col :span="12">
         <el-card shadow="never" header="Network Information">
-          <el-collapse v-model="networkExpanded">
-            <el-collapse-item v-for="(interface, if_data) in sortedInterfaces" :key="interface" :name="interface">
+          <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
+            <el-descriptions-item label="Primary IP">
+              <el-tag type="success">{{ hostInfo.ip_address || (serverStore.servers[props.serverId] as any)?.ip_address || '-' }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="Hostname">
+              {{ hostInfo.hostname || '-' }}
+            </el-descriptions-item>
+          </el-descriptions>
+          <el-empty v-if="sortedInterfaces.length === 0" description="Interface detail not yet available — redeploy agent" :image-size="60" />
+          <el-collapse v-else v-model="networkExpanded">
+            <el-collapse-item v-for="row in sortedInterfaces" :key="row.iface" :name="row.iface">
               <template #title>
-                {{ interface }} 
-                <el-tag v-if="if_data.is_default" size="small" type="success">Default</el-tag>
-                <el-tag v-if="!if_data.is_up" size="small" type="danger">Down</el-tag>
+                <span style="font-weight:600;margin-right:8px">{{ row.iface }}</span>
+                <el-tag v-if="!row.is_up" size="small" type="danger">Down</el-tag>
+                <el-tag v-else size="small" type="success">Up</el-tag>
               </template>
-              
-              <el-descriptions :column="1" border>
+              <el-descriptions :column="1" border size="small">
                 <el-descriptions-item label="MAC Address">
-                  <code>{{ if_data.hwaddr }}</code>
+                  <code>{{ row.mac || '-' }}</code>
                 </el-descriptions-item>
                 <el-descriptions-item label="IPv4 Address">
-                  <el-tag>{{ if_data.ipv4_address || 'None' }}</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="IPv4 Netmask">
-                  <el-tag>{{ if_data.ipv4_netmask || 'None' }}</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="IPv4 Broadcast">
-                  <el-tag>{{ if_data.ipv4_broadcast || 'None' }}</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="IPv4 Gateway">
-                  <el-tag>{{ if_data.ipv4_gateway || 'None' }}</el-tag>
+                  <el-tag v-if="row.ipv4">{{ row.ipv4 }}/{{ row.ipv4_prefix }}</el-tag>
+                  <span v-else>-</span>
                 </el-descriptions-item>
                 <el-descriptions-item label="IPv6 Address">
-                  <el-tag>{{ if_data.ipv6_address || 'None' }}</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="IPv6 Prefix">
-                  <el-tag>{{ if_data.ipv6_prefix || 'None' }}</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="IPv6 Scope">
-                  <el-tag>{{ if_data.ipv6_scope || 'None' }}</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="MTU">
-                  {{ if_data.mtu || '1500' }}
-                </el-descriptions-item>
-              </el-descriptions>
-            </el-collapse-item>
-            
-            <el-collapse-item name="system_dns" title="System DNS">
-              <el-descriptions :column="2" border>
-                <el-descriptions-item v-for="(nameserver, index) in DNS_servers" :key="index" :label="`Nameserver ${index + 1}`">
-                  <el-tag>{{ nameserver }}</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item v-for="(searchdomain, index) in DNS_searchdomains" :key="index" :label="`Search Domain ${index + 1}`">
-                  {{ searchdomain || '-' }}
+                  <el-tag v-if="row.ipv6" type="info">{{ row.ipv6 }}/{{ row.ipv6_prefix }}</el-tag>
+                  <span v-else>-</span>
                 </el-descriptions-item>
               </el-descriptions>
             </el-collapse-item>
@@ -294,207 +243,179 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { RefreshLeft, Coin, Connection, Clock, Operation } from '@element-plus/icons-vue'
 
+import { ServersAPI } from '@/api/opspilot/servers'
+import { useSaltStream } from '@/composables/useSaltStream'
 import { useServerStore } from '@/stores/server'
-import { useSaltStore } from '@/stores/salt'
+import { mountpointFromDiskMetric } from '@/utils/dashboardMetrics'
 
-// Props
-const props = defineProps<{
-  serverId: string
-}>()
+const props = defineProps<{ serverId: string }>()
 
-// Stores
+const { metrics } = useSaltStream(props.serverId)
 const serverStore = useServerStore()
-const saltStore = useSaltStore()
-
-// Reactive state
+const hostInfo = ref<Record<string, any>>({})
 const refreshing = ref(false)
-const storageExpanded = ref(['1'])
-const networkExpanded = ref(['eth0', 'lo'])
+const storageExpanded = ref(['2'])
+const networkExpanded = ref<string[]>([])
 
-// Computed
-const minion = computed(() => {
-  return saltStore.minions[props.serverId] || {}
-})
-
-const grains = computed(() => {
-  return minion.value.grains_info || {}
-})
-
-const server = computed(() => {
-  return serverStore.servers[props.serverId] || {}
-})
-
-const storage = computed(() => {
-  // Parse storage from grains
-  return {
-    disks: grains.value.disks || {},
-    filesystems: grains.value.disks ? grains.value.disks.map((disk: any) => ({
-      name: disk.mountpoint,
-      fstype: disk.fstype,
-      used_percent: disk.percent,
-      total: disk.total,
-      used: disk.used,
-      available: disk.available
-    })) : []
+const load = async () => {
+  try {
+    hostInfo.value = await ServersAPI.getHostInfo(props.serverId)
+    const ifaces: string[] = (hostInfo.value.network_interfaces ?? []).map((i: any) => i.iface)
+    networkExpanded.value = ifaces.slice(0, 2)
+  } catch (e) {
+    console.warn('[SaltInfo] host-info fetch failed', e)
   }
-})
-
-const network = computed(() => {
-  // Parse network from grains
-  const interfaces: any = grains.value.ipv4 || {}
-  
-  return Object.entries(interfaces).map(([iface, if_data]: [string, any]) => ({
-    interface,
-    ...if_data,
-    is_default: grains.value.default_gateway === if_data.gateway,
-    is_up: grains.value.ipv4_enabled === true
-  }))
-})
-
-const sortedInterfaces = computed(() => {
-  return Object.keys(network.value).sort()
-})
-
-const DNS_servers = computed(() => {
-  const dns: string[] = grains.value.dns || []
-  return dns.map((addr, index) => [addr, index])
-})
-
-const DNS_searchdomains = computed(() => {
-  return grains.value.dns_search || []
-})
-
-// Helper functions
-const minionStatus = computed(() => {
-  if (!minion.value.last_seen) return 'Unknown'
-  
-  const lastSeen = new Date(minion.value.last_seen)
-  const now = new Date()
-  const diffMs = now.getTime() - lastSeen.getTime()
-  
-  if (diffMs < 60000) return 'Online'  // < 1 min
-  if (diffMs < 300000) return 'Warning' // < 5 min
-  return 'Offline'
-})
-
-const minionStatusClass = computed(() => {
-  switch (minionStatus.value) {
-    case 'Online': return 'status-online'
-    case 'Warning': return 'status-warning'
-    case 'Offline': return 'status-offline'
-    default: return 'status-unknown'
-  }
-})
-
-// Format functions
-const formatLastSeen = (lastSeen: string | undefined) => {
-  if (!lastSeen) return 'Never'
-  
-  const date = new Date(lastSeen)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  
-  if (diffMs < 60000) return 'Just now'
-  if (diffMs < 3600000) return `${Math.floor(diffMs / 60000)}m ago`
-  return `${Math.floor(diffMs / 86400000)}d ago`
 }
 
-const formatLastHighstate = (lastHighstate: string | undefined) => {
-  if (!lastHighstate) return 'Never run'
-  
-  const date = new Date(lastHighstate)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  
-  return `${Math.floor(diffMs / 60000)}m ago`
-}
+onMounted(load)
 
-const formatUptime = (seconds: number | undefined) => {
-  if (!seconds) return 'Unknown'
-  
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  
-  const parts = []
-  if (days > 0) parts.push(`${days}d`)
-  if (hours > 0 || days > 0) parts.push(`${hours}h`)
-  if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`)
-  
-  return parts.join(' ') || '0m'
-}
-
-const formatMemory = (bytes: number | undefined) => {
-  if (!bytes) return 'Unknown'
-  
-  const gb = bytes / (1024 ** 3)
-  const mb = bytes / (1024 ** 2)
-  
-  if (gb >= 1) return `${gb.toFixed(2)} GB`
-  return `${mb.toFixed(2)} MB`
-}
-
-const formatBytes = (bytes: number | undefined) => {
-  if (!bytes) return '0 B'
-  
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let value = bytes
-  let unitIndex = 0
-  
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex++
-  }
-  
-  return `${value.toFixed(2)} ${units[unitIndex]}`
-}
-
-const formatDateTime = (date: string | undefined) => {
-  if (!date) return '-'
-  
-  const d = new Date(date)
-  return d.toLocaleString()
-}
-
-const getUsageColor = (percent: number) => {
-  if (percent < 50) return '#67C23A'  // Green
-  if (percent < 70) return '#E6A23C'  // Yellow
-  if (percent < 85) return '#F59E0B'  // Orange
-  return '#F56C6C'  // Red
-}
-
-// Actions
 const refreshGrains = async () => {
   refreshing.value = true
-  
   try {
-    // Call Salt API to refresh grains
-    // This would be done via a dedicated endpoint
-    // For now, we'll simulate it
-    
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    ElMessage({
-      message: 'Grains refreshed successfully',
-      type: 'success',
-      duration: 3000
-    })
-  } catch (error) {
-    console.error('Failed to refresh grains:', error)
-    ElMessage.error('Failed to refresh grains')
+    await load()
+    ElMessage.success('Host info refreshed')
+  } catch {
+    ElMessage.error('Refresh failed')
   } finally {
     refreshing.value = false
   }
 }
 
-// Lifecycle
-onMounted(async () => {
-  console.log('Salt Info component mounted for server:', props.serverId)
+// ── Agent status ──────────────────────────────────────────────────────────────
+
+// Use latest SSE metric timestamp as the freshest "last seen" signal.
+// Falls back to agent_last_seen_at from the server store (set at list-fetch time).
+const lastAgentSeenMs = computed(() => {
+  const sseTs = Object.values(metrics.value)
+    .map(m => m.timestamp ? new Date(m.timestamp).getTime() : 0)
+    .reduce((a, b) => Math.max(a, b), 0)
+  if (sseTs > 0) return sseTs
+  const stored = (serverStore.servers[props.serverId] as any)?.agent_last_seen_at
+  return stored ? new Date(stored).getTime() : null
 })
+
+const minion = computed(() => ({
+  last_seen: lastAgentSeenMs.value ? new Date(lastAgentSeenMs.value).toISOString() : null,
+  last_highstate: null,
+}))
+
+const minionStatus = computed(() => {
+  const ms = lastAgentSeenMs.value
+  if (!ms) return 'Unknown'
+  const diff = Date.now() - ms
+  if (diff < 60_000) return 'Online'
+  if (diff < 300_000) return 'Warning'
+  return 'Offline'
+})
+
+const minionStatusClass = computed(() =>
+  ({ Online: 'status-online', Warning: 'status-warning', Offline: 'status-offline' }[minionStatus.value] ?? 'status-unknown')
+)
+
+// ── Uptime from SSE ───────────────────────────────────────────────────────────
+
+const server = computed(() => {
+  const v = metrics.value['uptime_seconds']?.metric_value
+  return { uptime_seconds: (v != null && Number.isFinite(v)) ? v : 0 }
+})
+
+// ── Grains shim ───────────────────────────────────────────────────────────────
+
+const grains = computed(() => ({
+  os_family:           hostInfo.value.os_name ?? '-',
+  osfullname:          [hostInfo.value.os_name, hostInfo.value.os_version].filter(Boolean).join(' ') || '-',
+  osrelease:           hostInfo.value.os_version ?? '-',
+  kernel:              hostInfo.value.kernel ?? '-',
+  osarch:              hostInfo.value.architecture ?? '-',
+  hostname:            hostInfo.value.hostname ?? '-',
+  fqdn:                hostInfo.value.fqdn ?? '-',
+  domain:              hostInfo.value.domain ?? '-',
+  virtual:             hostInfo.value.virtual ?? false,
+  virtual_type:        hostInfo.value.virtual_type ?? '',
+  timezone:            hostInfo.value.timezone ?? 'UTC',
+  cpu_model:           hostInfo.value.cpu_model ?? '-',
+  num_cpus:            hostInfo.value.cpu_cores ?? '-',
+  cpuarch:             hostInfo.value.architecture ?? '-',
+  mem_total:           hostInfo.value.memory_mb ? hostInfo.value.memory_mb * 1024 * 1024 : 0,
+  cloud_provider:      hostInfo.value.cloud_provider ?? '',
+  cloud_region:        hostInfo.value.cloud_region ?? '',
+  cloud_instance_type: hostInfo.value.cloud_instance_type ?? '',
+}))
+
+const sortedInterfaces = computed(() =>
+  [...(hostInfo.value.network_interfaces ?? [])].sort((a: any, b: any) =>
+    String(a.iface).localeCompare(String(b.iface))
+  )
+)
+
+const diskMounts = computed(() => {
+  const disks: any[] = []
+  for (const metric of Object.values(metrics.value)) {
+    const name = metric.metric_name
+    if (!name?.startsWith('disk_usage_')) continue
+    if (name === 'disk_usage_percent' || name === 'disk_usage') continue
+    const mountpoint = mountpointFromDiskMetric(name)
+    const meta = (metric.metadata ?? {}) as Record<string, unknown>
+    disks.push({
+      mountpoint,
+      used: typeof meta.used_bytes === 'number' ? meta.used_bytes : 0,
+      total: typeof meta.total_bytes === 'number' ? meta.total_bytes : 0,
+      used_percent: Math.min(100, metric.metric_value ?? 0),
+      fstype: typeof meta.fstype === 'string' ? meta.fstype : '',
+      device: typeof meta.device === 'string' ? meta.device : '',
+    })
+  }
+  if (disks.length === 0) {
+    const d = metrics.value['disk_usage_percent'] ?? metrics.value['disk_usage']
+    if (d) disks.push({ mountpoint: '/', used: 0, total: 0, used_percent: d.metric_value ?? 0, fstype: '', device: '' })
+  }
+  return disks
+})
+
+const storage = computed(() => ({ disks: diskMounts.value, filesystems: diskMounts.value }))
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const formatLastSeen = (ts: string | undefined) => {
+  if (!ts) return 'Never'
+  const diff = Date.now() - new Date(ts).getTime()
+  if (diff < 60_000) return 'Just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return `${Math.floor(diff / 86_400_000)}d ago`
+}
+
+const formatUptime = (seconds: number) => {
+  if (!seconds) return 'Unknown'
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return [d && `${d}d`, (h || d) && `${h}h`, `${m}m`].filter(Boolean).join(' ') || '0m'
+}
+
+const formatMemory = (bytes: number) => {
+  if (!bytes) return '-'
+  const gb = bytes / 1024 ** 3
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / 1024 ** 2).toFixed(0)} MB`
+}
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let v = bytes, i = 0
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  return `${v.toFixed(1)} ${units[i]}`
+}
+
+const formatDateTime = (ts: string | undefined) => ts ? new Date(ts).toLocaleString() : '-'
+const formatLastHighstate = (_: string | undefined) => 'N/A'
+
+const getUsageColor = (pct: number) =>
+  pct < 50 ? '#67C23A' : pct < 70 ? '#E6A23C' : pct < 85 ? '#F59E0B' : '#F56C6C'
 </script>
 
 <style scoped>
@@ -558,11 +479,11 @@ onMounted(async () => {
 }
 
 .stat-value.status-online {
-  color: #67C23A;
+  color: #67c23a;
 }
 
 .stat-value.status-warning {
-  color: #E6A23C;
+  color: #e6a23c;
 }
 
 .stat-value.status-offline {

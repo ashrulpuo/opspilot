@@ -1,19 +1,21 @@
 """SSE endpoints for real-time updates with JWT authentication."""
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Header, Query, HTTPException, status
 from fastapi.responses import StreamingResponse
 import logging
 from typing import Optional
 
 from app.services.sse_service import SSEService
-from app.core.security import verify_token
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/stream", tags=["SSE"])
+# Mounted in main with prefix /api/v1 → full paths /api/v1/stream/...
+router = APIRouter(prefix="/stream", tags=["SSE"])
 
 # Initialize SSE service with Redis URL
-sse_service = SSEService(redis_url=settings.redis_url)
+sse_service = SSEService(redis_url=settings.REDIS_URL)
 
 
 async def _get_token_from_header(authorization: str) -> str:
@@ -51,10 +53,33 @@ async def _get_token_from_header(authorization: str) -> str:
     return token
 
 
+async def _resolve_sse_token(
+    authorization: Optional[str],
+    access_token: Optional[str],
+) -> str:
+    """Resolve JWT from Authorization header (API clients) or access_token query (browser EventSource).
+
+    Native EventSource cannot send custom headers; clients pass ``access_token`` as a query parameter.
+    Prefer Authorization Bearer when possible (tokens are less likely to appear in proxy logs).
+    """
+    if authorization and authorization.strip():
+        return await _get_token_from_header(authorization)
+    if access_token and access_token.strip():
+        return access_token.strip()
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Missing JWT: send Authorization: Bearer <token> or access_token query parameter",
+    )
+
+
 @router.get("/metrics")
 async def stream_metrics(
     server_id: Optional[str] = Query(None, description="Server ID to filter"),
-    authorization: str = Header(..., alias="Authorization")
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    access_token: Optional[str] = Query(
+        None,
+        description="JWT when using browser EventSource (cannot set Authorization header)",
+    ),
 ):
     """
     Stream real-time metrics via SSE with JWT auth.
@@ -84,7 +109,7 @@ async def stream_metrics(
     """
     try:
         # Verify and extract JWT token
-        token = await _get_token_from_header(authorization)
+        token = await _resolve_sse_token(authorization, access_token)
         
         # Build channel name
         if server_id:
@@ -121,7 +146,11 @@ async def stream_metrics(
 @router.get("/alerts")
 async def stream_alerts(
     server_id: Optional[str] = Query(None, description="Server ID to filter"),
-    authorization: str = Header(..., alias="Authorization")
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    access_token: Optional[str] = Query(
+        None,
+        description="JWT when using browser EventSource (cannot set Authorization header)",
+    ),
 ):
     """
     Stream alerts via SSE with JWT auth.
@@ -150,7 +179,7 @@ async def stream_alerts(
         - If no server_id: `alerts:all` (admin only)
     """
     try:
-        token = await _get_token_from_header(authorization)
+        token = await _resolve_sse_token(authorization, access_token)
         
         if server_id:
             channel = f"alerts:{server_id}"
@@ -183,7 +212,11 @@ async def stream_alerts(
 @router.get("/services")
 async def stream_services(
     server_id: Optional[str] = Query(None, description="Server ID to filter"),
-    authorization: str = Header(..., alias="Authorization")
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    access_token: Optional[str] = Query(
+        None,
+        description="JWT when using browser EventSource (cannot set Authorization header)",
+    ),
 ):
     """
     Stream service state changes via SSE with JWT auth.
@@ -212,7 +245,7 @@ async def stream_services(
         - If no server_id: `services:all`
     """
     try:
-        token = await _get_token_from_header(authorization)
+        token = await _resolve_sse_token(authorization, access_token)
         
         if server_id:
             channel = f"services:{server_id}"
@@ -245,7 +278,11 @@ async def stream_services(
 @router.get("/processes")
 async def stream_processes(
     server_id: Optional[str] = Query(None, description="Server ID to filter"),
-    authorization: str = Header(..., alias="Authorization")
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    access_token: Optional[str] = Query(
+        None,
+        description="JWT when using browser EventSource (cannot set Authorization header)",
+    ),
 ):
     """
     Stream process list via SSE with JWT auth (NEW).
@@ -270,7 +307,7 @@ async def stream_processes(
         - If no server_id: `processes:all` (admin only)
     """
     try:
-        token = await _get_token_from_header(authorization)
+        token = await _resolve_sse_token(authorization, access_token)
         
         if server_id:
             channel = f"processes:{server_id}"
@@ -303,7 +340,11 @@ async def stream_processes(
 @router.get("/packages")
 async def stream_packages(
     server_id: Optional[str] = Query(None, description="Server ID to filter"),
-    authorization: str = Header(..., alias="Authorization")
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    access_token: Optional[str] = Query(
+        None,
+        description="JWT when using browser EventSource (cannot set Authorization header)",
+    ),
 ):
     """
     Stream package updates via SSE with JWT auth (NEW).
@@ -328,7 +369,7 @@ async def stream_packages(
         - If no server_id: `packages:all` (admin only)
     """
     try:
-        token = await _get_token_from_header(authorization)
+        token = await _resolve_sse_token(authorization, access_token)
         
         if server_id:
             channel = f"packages:{server_id}"
@@ -361,7 +402,11 @@ async def stream_packages(
 @router.get("/logs")
 async def stream_logs(
     server_id: Optional[str] = Query(None, description="Server ID to filter"),
-    authorization: str = Header(..., alias="Authorization")
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    access_token: Optional[str] = Query(
+        None,
+        description="JWT when using browser EventSource (cannot set Authorization header)",
+    ),
 ):
     """
     Stream log entries via SSE with JWT auth (NEW).
@@ -389,7 +434,7 @@ async def stream_logs(
         - If no server_id: `logs:all` (admin only)
     """
     try:
-        token = await _get_token_from_header(authorization)
+        token = await _resolve_sse_token(authorization, access_token)
         
         if server_id:
             channel = f"logs:{server_id}"
@@ -432,7 +477,7 @@ async def sse_health():
         import redis.asyncio as redis
         
         # Check Redis connection
-        r = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        r = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
         redis_health = await r.ping()
         await r.close()
         
@@ -451,3 +496,6 @@ async def sse_health():
             "service": "SSE streaming",
             "timestamp": datetime.utcnow().isoformat()
         }
+
+
+stream_router = router

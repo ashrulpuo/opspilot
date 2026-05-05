@@ -108,7 +108,7 @@ class ServerService:
         if auto_install_agent and ssh_username and ssh_password:
             server.status = "installing_agent"
         else:
-            # Honest default until the push agent or Salt reports in (avoids "online" with no metrics).
+            # Honest default until the Salt minion / metrics path reports in (avoids "online" with no data).
             server.status = "offline"
         await db.commit()
         await db.refresh(server)

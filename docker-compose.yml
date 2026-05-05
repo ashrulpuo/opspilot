@@ -21,7 +21,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - opspilot-network
+      - opspilot
 
   # Redis
   redis:
@@ -38,7 +38,7 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - opspilot-network
+      - opspilot
 
   # Vault
   vault:
@@ -53,7 +53,7 @@ services:
     cap_add:
       - IPC_LOCK
     networks:
-      - opspilot-network
+      - opspilot
     healthcheck:
       test: ["CMD", "vault", "status"]
       interval: 10s
@@ -71,7 +71,7 @@ services:
     depends_on:
       - redis
     networks:
-      - opspilot-network
+      - opspilot
 
   # pgAdmin (optional - for PostgreSQL GUI)
   pgadmin:
@@ -88,7 +88,7 @@ services:
     depends_on:
       - postgres
     networks:
-      - opspilot-network
+      - opspilot
 
   # Hot-reload API + Vite UI (opt-in: docker compose --profile dev up -d dev-backend dev-frontend)
   dev-backend:
@@ -102,6 +102,7 @@ services:
       - deploy/.env
     environment:
       # Keep DB/Redis/Vault URLs from deploy/.env (must match existing postgres_data password).
+      DEBUG: "false"
       PUBLIC_API_BASE_URL: https://opspilot.appfinityhub.com/api/v1
       app_url: https://opspilot.appfinityhub.com
       ALLOWED_ORIGINS: '["https://opspilot.appfinityhub.com","http://127.0.0.1:8848","http://localhost:8848","http://127.0.0.1:8000","http://localhost:8000"]'
@@ -115,11 +116,13 @@ services:
       vault:
         condition: service_started
     networks:
-      - opspilot-network
+      opspilot:
+        aliases:
+          - opspilot-backend
     command: >
       sh -c "pip install --no-cache-dir -q -e '.[dev]' &&
              alembic upgrade head &&
-             exec uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+             exec uvicorn app.main:app --reload --reload-exclude 'app/services/agent_bundle/*' --host 0.0.0.0 --port 8000 --log-level warning"
 
   dev-frontend:
     profiles: ["dev"]
@@ -140,7 +143,7 @@ services:
     depends_on:
       - dev-backend
     networks:
-      - opspilot-network
+      - opspilot
     command: >
       sh -c "apt-get update -qq && apt-get install -y -qq git >/dev/null &&
              (test -d .git || git init -q) &&
@@ -149,6 +152,25 @@ services:
              pnpm install --frozen-lockfile &&
              exec pnpm exec vite --host 0.0.0.0 --port 8848"
 
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: https://opspilot.appfinityhub.com
+    image: opspilot-frontend:latest
+    container_name: opspilot-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18080:80"
+    networks:
+      - opspilot
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   postgres_data:
   redis_data:
@@ -156,6 +178,8 @@ volumes:
   pgadmin_data:
   dev_frontend_node_modules:
 
+# Same network key as docker-compose.prod.yml (`opspilot`) so dev-backend shares the stack
+# with prod Postgres/Redis when both are run from this project directory (same compose project name).
 networks:
-  opspilot-network:
+  opspilot:
     driver: bridge

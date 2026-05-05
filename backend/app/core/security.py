@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from argon2 import PasswordHasher
 
@@ -151,3 +151,13 @@ def verify_api_key(api_key: str) -> bool:
         True if API key is valid, False otherwise
     """
     return api_key == settings.SALT_API_KEY
+
+
+async def verify_salt_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> str:
+    """FastAPI dependency: require valid Salt runner API key (``X-API-Key``)."""
+    if not verify_api_key(x_api_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
+    return x_api_key

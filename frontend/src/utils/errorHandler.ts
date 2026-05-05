@@ -1,8 +1,20 @@
 import { ElNotification } from 'element-plus'
 
+/** Dedupe identical errors so SSE/render loops do not spam toasts */
+let lastSig = ''
+let lastAt = 0
+const DEDUP_MS = 4000
+
+function notificationMessage(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message || String(err)
+  }
+  return String(err)
+}
+
 /** Global Vue error handler */
-const errorHandler = (error: any) => {
-  if (error.status || error.status === 0) {
+const errorHandler = (err: any) => {
+  if (err?.status || err?.status === 0) {
     return false
   }
   const errorMap: { [key: string]: string } = {
@@ -14,13 +26,23 @@ const errorHandler = (error: any) => {
     EvalError: 'Invalid use of eval',
     URIError: 'URI error',
   }
-  console.error(error)
-  const errorName = errorMap[error.name] || 'Unknown error'
+  console.error(err)
+
+  const msg = notificationMessage(err)
+  const title = errorMap[err?.name] || 'Unknown error'
+  const now = Date.now()
+  const sig = `${title}:${msg}`
+  if (sig === lastSig && now - lastAt < DEDUP_MS) {
+    return false
+  }
+  lastSig = sig
+  lastAt = now
+
   ElNotification({
-    title: errorName,
-    message: error,
+    title,
+    message: msg,
     type: 'error',
-    duration: 3000,
+    duration: 4500,
   })
 }
 

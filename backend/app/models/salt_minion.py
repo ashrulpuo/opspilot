@@ -21,3 +21,5 @@ class SaltMinion(Base):
     grains_info = Column(postgresql.JSONB(), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    server = relationship("Server", back_populates="salt_minion")

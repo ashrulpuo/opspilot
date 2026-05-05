@@ -106,7 +106,20 @@
 
         <el-table-column prop="status" label="Status" min-width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">
+            <el-tooltip
+              v-if="row.agent_install_last_error"
+              :content="row.agent_install_last_error"
+              placement="top"
+              :max-width="420"
+            >
+              <span class="status-cell-wrap">
+                <el-tag :type="getStatusType(row.status)" size="small">
+                  {{ row.status }}
+                </el-tag>
+                <el-icon class="status-error-hint"><CircleClose /></el-icon>
+              </span>
+            </el-tooltip>
+            <el-tag v-else :type="getStatusType(row.status)" size="small">
               {{ row.status }}
             </el-tag>
           </template>
@@ -118,7 +131,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Actions" width="200" fixed="right">
+        <el-table-column label="Actions" width="300" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click.stop="handleSSH(row)">
               <el-icon><Monitor /></el-icon>
@@ -127,6 +140,17 @@
             <el-button link type="primary" size="small" @click.stop="handleView(row)">
               <el-icon><View /></el-icon>
               View
+            </el-button>
+            <el-button
+              v-if="row.has_ssh_credentials && row.os_type?.toLowerCase() === 'linux'"
+              link
+              type="warning"
+              size="small"
+              :loading="reinstallingId === row.id"
+              @click.stop="handleReinstallMinion(row)"
+            >
+              <el-icon><RefreshRight /></el-icon>
+              Reinstall
             </el-button>
             <el-popconfirm title="Are you sure you want to delete this server?" @confirm="handleDelete(row)">
               <template #reference>
@@ -193,11 +217,11 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="Auto-install agent" prop="auto_install_agent">
+        <el-form-item label="Auto-install Salt minion" prop="auto_install_agent">
           <el-checkbox v-model="addForm.auto_install_agent" :disabled="addLoading || addForm.os_type !== 'linux'">
-            Install OpsPilot push agent over SSH (Linux only)
+            Install Salt minion over SSH (Linux only; uses SALT_MASTER_HOST on the API)
           </el-checkbox>
-          <p v-if="addForm.os_type !== 'linux'" class="add-form-hint">Agent auto-install is available for Linux only.</p>
+          <p v-if="addForm.os_type !== 'linux'" class="add-form-hint">Minion auto-install is available for Linux only.</p>
         </el-form-item>
 
         <template v-if="addForm.auto_install_agent && addForm.os_type === 'linux'">
@@ -212,7 +236,7 @@
               v-model="addForm.ssh_password"
               type="password"
               show-password
-              placeholder="Stored encrypted for OpsPilot SSH & auto-install"
+              placeholder="Stored encrypted for OpsPilot SSH & minion install"
               :disabled="addLoading"
               autocomplete="new-password"
               style="width: 100%"
@@ -251,10 +275,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import type { CreateServerRequest } from '@/api/opspilot/types'
+import type { CreateServerRequest, Server } from '@/api/opspilot/types'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Monitor, View, Delete, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { Plus, Monitor, View, Delete, CircleCheck, CircleClose, RefreshRight } from '@element-plus/icons-vue'
+import { ServersAPI } from '@/api/opspilot/servers'
 import { useOpsPilotServerStore } from '@/stores/modules/opspilot'
 import { useOpsPilotOrganizationStore } from '@/stores/modules/opspilot'
 
@@ -266,6 +291,7 @@ const showAddDialog = ref(false)
 const addLoading = ref(false)
 const addFormRef = ref<FormInstance>()
 const selectedOrgId = ref<string>()
+const reinstallingId = ref<string | null>(null)
 
 const canManageServers = computed(
   () => !!orgStore.currentOrganization?.id || !!selectedOrgId.value,
@@ -412,6 +438,31 @@ const handleSSH = (row: any) => {
 
 const handleView = (row: any) => {
   router.push(`/servers/${row.id}`)
+}
+
+const handleReinstallMinion = async (row: Server) => {
+  try {
+    await ElMessageBox.confirm(
+      'Re-run the SSH Salt minion install using the SSH username and password stored for this server?',
+      'Reinstall Salt minion',
+      { type: 'warning', confirmButtonText: 'Reinstall', cancelButtonText: 'Cancel' },
+    )
+    reinstallingId.value = row.id
+    await ServersAPI.reinstallSaltMinion(row.id)
+    ElMessage.success('Reinstall started. Status will change when the job finishes.')
+    const orgId = row.organization_id || selectedOrgId.value || orgStore.currentOrganization?.id
+    if (orgId) {
+      await serverStore.fetchServers(orgId)
+    }
+  } catch (e: unknown) {
+    if (e === 'cancel' || e === 'close') {
+      return
+    }
+    const msg = e instanceof Error ? e.message : 'Failed to queue reinstall'
+    ElMessage.error(msg)
+  } finally {
+    reinstallingId.value = null
+  }
 }
 
 const handleAdd = async () => {
@@ -730,6 +781,18 @@ html.dark .stat-card {
 
   .empty-text {
     color: #656a76;
+  }
+
+  .status-cell-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: help;
+  }
+
+  .status-error-hint {
+    font-size: 14px;
+    color: var(--el-color-danger);
   }
 }
 

@@ -10,7 +10,8 @@ from app.core.security import verify_salt_api_key
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/salt", tags=["Salt Ingestion"])
+# Mounted in main with prefix /api/v1 → /api/v1/salt/...
+router = APIRouter(prefix="/salt", tags=["Salt Ingestion"])
 
 # Initialize Salt API client
 salt_api_client = SaltAPIClient()
@@ -477,3 +478,20 @@ async def ingest_logs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to ingest logs: {str(e)}"
         )
+
+
+@router.get("/health")
+async def salt_ingestion_health():
+    """Health check for Salt ingestion routes."""
+    return {
+        "status": "healthy",
+        "service": "Salt Ingestion",
+        "version": "1.0.0",
+        "endpoints": [
+            "/api/v1/salt/heartbeat",
+            "/api/v1/salt/metrics",
+            "/api/v1/salt/beacon",
+            "/api/v1/salt/services",
+        ],
+        "timestamp": datetime.utcnow().isoformat(),
+    }

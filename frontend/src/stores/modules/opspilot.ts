@@ -141,12 +141,7 @@ export const useOpsPilotAuthStore = defineStore(
   },
   {
     // Do not persist setupRequired — always resolved from GET /auth/setup-required on load.
-    persist: piniaPersistConfig('opspilot-auth', [
-      'accessToken',
-      'refreshToken',
-      'user',
-      'isAuthenticated',
-    ]),
+    persist: piniaPersistConfig('opspilot-auth', ['accessToken', 'refreshToken', 'user', 'isAuthenticated']),
   }
 )
 
@@ -252,12 +247,8 @@ export const useOpsPilotServerStore = defineStore(
     const currentServer = ref<Server | null>(null)
     const loading = ref<boolean>(false)
 
-    const onlineServers = computed(() =>
-      servers.value.filter(s => s.status === 'online' || s.status === 'active'),
-    )
-    const offlineServers = computed(() =>
-      servers.value.filter(s => s.status !== 'online' && s.status !== 'active'),
-    )
+    const onlineServers = computed(() => servers.value.filter(s => s.status === 'online' || s.status === 'active'))
+    const offlineServers = computed(() => servers.value.filter(s => s.status !== 'online' && s.status !== 'active'))
 
     const fetchServers = async (organizationId?: string) => {
       loading.value = true
@@ -449,4 +440,40 @@ export const useOpsPilotDashboardStore = defineStore('opspilot-dashboard', () =>
     loading,
     fetchDashboard,
   }
+})
+
+// ============================================
+// Monitor Store
+// ============================================
+
+import { MonitorsAPI } from '@/api/opspilot/monitors'
+import type { Monitor, MonitorStats } from '@/api/opspilot/monitors'
+
+export const useOpsPilotMonitorStore = defineStore('opspilot-monitor', () => {
+  const monitors = ref<Monitor[]>([])
+  const monitorStats = ref<MonitorStats>({ total: 0, up: 0, down: 0, paused: 0, pending: 0 })
+  const loading = ref(false)
+
+  const fetchMonitors = async () => {
+    loading.value = true
+    try {
+      const [list, stats] = await Promise.all([MonitorsAPI.list(), MonitorsAPI.getStats()])
+      monitors.value = list
+      monitorStats.value = stats
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const upsertMonitor = (m: Monitor) => {
+    const idx = monitors.value.findIndex(x => x.id === m.id)
+    if (idx !== -1) monitors.value[idx] = m
+    else monitors.value.unshift(m)
+  }
+
+  const removeMonitor = (id: string) => {
+    monitors.value = monitors.value.filter(m => m.id !== id)
+  }
+
+  return { monitors, monitorStats, loading, fetchMonitors, upsertMonitor, removeMonitor }
 })

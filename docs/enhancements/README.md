@@ -10,9 +10,12 @@ All enhancements, features, and improvements made to the OpsPilot system are doc
 
 ```
 enhancements/
-├── README.md                    # This file
-├── 001-saltstack-sse.md       # SSE implementation for real-time metrics
-├── 002-...                     # Future enhancements
+├── README.md                           # This file
+├── 001-saltstack-sse.md                # SSE implementation for real-time metrics
+├── 002-saltstack-implementation.md     # Salt data collection plan (API push architecture)
+├── 002-saltstack-implementation-full.md
+├── 002-saltstack-ux.md                 # Server detail / Salt UI design
+├── 003-salt-minion-ssh-auto-install.md # SSH Salt minion install when adding a server
 └── ...
 ```
 
@@ -47,13 +50,16 @@ enhancements/
 
 ## Enhancement Log
 
-| # | ID | Title | Date | Category | Status |
-|---|----|----|----|----------|--------|
-| 1 | `002-saltstack-implementation` | 2026-04-17 | infrastructure | 📋 Planning |
-| 2 | `002-saltstack-implementation-full` | 2026-04-17 | infrastructure | 📋 Ready to Implement |
-| 3 | `002-saltstack-ux` | 2026-04-17 | design | ✅ Complete |
-| 4 | `001-saltstack-sse` | 2026-04-17 | sse | ✅ Implemented |
+| # | Document | Category | Status |
+|---|----------|----------|--------|
+| 001 | [001-saltstack-sse.md](./001-saltstack-sse.md) | sse | ✅ Implemented |
+| 002 | [002-saltstack-implementation.md](./002-saltstack-implementation.md) | infrastructure | 📋 Planning / partial (see 003 for SSH minion) |
+| 002 | [002-saltstack-implementation-full.md](./002-saltstack-implementation-full.md) | infrastructure | 📋 Ready to implement |
+| 002 | [002-saltstack-ux.md](./002-saltstack-ux.md) | design | 📋 Design complete |
+| 003 | [003-salt-minion-ssh-auto-install.md](./003-salt-minion-ssh-auto-install.md) | infrastructure | ✅ Implemented |
+
+**Salt stack:** Start with **002** (architecture + API), **001** (SSE), **003** (SSH minion install at add-server). **002-saltstack-ux** is the UI spec for server detail.
 
 ---
 
-**Last Updated:** 2026-04-17
+**Last Updated:** 2026-04-21

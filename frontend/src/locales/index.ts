@@ -16,7 +16,7 @@ export const localeMapping = {
   en: 'English',
 } as const
 
-const messageLocales = Object.keys(i18n.global.messages as Record<string, unknown>)
+const messageLocales = i18n.global.availableLocales
 for (const locale of messageLocales) {
   if (!localeMapping[locale as keyof typeof localeMapping]) {
     // eslint-disable-next-line no-console

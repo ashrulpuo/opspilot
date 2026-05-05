@@ -40,7 +40,7 @@ def upgrade():
     # ============================================================
     op.create_table(
         'salt_events',
-        sa.Column('id', sa.String(), nullable=False),
+        sa.Column('id', sa.BigInteger(), primary_key=True, autoincrement=True, nullable=False),
         sa.Column('server_id', sa.String(), sa.ForeignKey('servers.id', ondelete='CASCADE'), nullable=False, index=True),
         sa.Column('event_tag', sa.String(), nullable=False),
         sa.Column('event_type', sa.String(), nullable=False, index=True),  # 'cpu_alert', 'memory_alert', etc.
@@ -67,7 +67,7 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(), nullable=False),
     )
     op.create_index('idx_service_states_server_id', 'salt_service_states', ['server_id'])
-    op.create_index('idx_service_states_service_name', 'salt_service_states', ['server_name', 'server_id'])
+    op.create_index('idx_service_states_service_name', 'salt_service_states', ['service_name', 'server_id'])
     op.create_index('idx_service_states_status', 'salt_service_states', ['status', 'created_at'])
 
     # ============================================================
@@ -134,9 +134,9 @@ def upgrade():
     # ============================================================
     # Update Existing Metrics Table
     # ============================================================
-    # Add unit and metadata columns to existing metrics table
-    op.add_column('metrics', 'unit', sa.String(), nullable=True)
-    op.add_column('metrics', 'metadata', postgresql.JSONB(), nullable=True)
+    # Add unit and metadata columns (some DBs already have unit from earlier schema)
+    op.execute(sa.text("ALTER TABLE metrics ADD COLUMN IF NOT EXISTS unit VARCHAR"))
+    op.execute(sa.text("ALTER TABLE metrics ADD COLUMN IF NOT EXISTS metadata JSONB"))
 
 
 def downgrade():
@@ -183,5 +183,5 @@ def downgrade():
     # ============================================================
     # Remove Added Columns
     # ============================================================
-    op.drop_column('metrics', 'metadata')
-    op.drop_column('metrics', 'unit')
+    op.execute(sa.text("ALTER TABLE metrics DROP COLUMN IF EXISTS metadata"))
+    # unit may predate this migration — do not drop here

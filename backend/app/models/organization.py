@@ -21,6 +21,8 @@ class Organization(Base):
     members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan")
     servers = relationship("Server", back_populates="organization", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="organization", cascade="all, delete-orphan")
+    smtp_config = relationship("NotificationSmtpConfig", back_populates="organization", uselist=False, cascade="all, delete-orphan")
+    notification_recipients = relationship("NotificationRecipient", back_populates="organization", cascade="all, delete-orphan")
 
 
 class OrganizationMember(Base):

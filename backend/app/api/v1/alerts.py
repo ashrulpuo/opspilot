@@ -7,7 +7,8 @@ from sqlalchemy import select, func, and_, or_
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.core.email import email_service
+from app.core.email import EmailService, email_service
+from app.models.notification import NotificationRecipient, NotificationSmtpConfig
 from app.models.alert import Alert
 from app.models.server import Server
 from app.models.organization import Organization, OrganizationMember
@@ -50,15 +51,14 @@ class AlertResponse(BaseModel):
     server_hostname: Optional[str]
     organization_id: str
     type: str
-    severity: str
-    title: str
-    message: str
+    severity: Optional[str]
+    title: Optional[str]
+    message: Optional[str]
     value: Optional[float]
     threshold: Optional[float]
     resolved: bool
     resolved_at: Optional[str]
     created_at: str
-    updated_at: str
 
 
 class AlertsListResponse(BaseModel):
@@ -68,7 +68,7 @@ class AlertsListResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
-    alerts: List[AlertResponse]
+    items: List[AlertResponse]
 
 
 class AlertStatsResponse(BaseModel):
@@ -130,7 +130,7 @@ async def list_alerts(
             page=page,
             page_size=page_size,
             total_pages=0,
-            alerts=[],
+            items=[],
         )
 
     # Build query
@@ -146,7 +146,10 @@ async def list_alerts(
     if severity:
         query = query.where(Alert.severity == severity)
     if resolved is not None:
-        query = query.where(Alert.resolved == resolved)
+        if resolved:
+            query = query.where(Alert.status == "resolved")
+        else:
+            query = query.where(Alert.status != "resolved")
     if start:
         from datetime import datetime
         start_date = datetime.fromisoformat(start)
@@ -187,10 +190,9 @@ async def list_alerts(
                 message=alert.message,
                 value=alert.value,
                 threshold=alert.threshold,
-                resolved=alert.resolved,
-                resolved_at=alert.resolved_at.isoformat() if alert.resolved_at else None,
-                created_at=alert.created_at.isoformat(),
-                updated_at=alert.updated_at.isoformat(),
+                resolved=alert.status == "resolved",
+                resolved_at=alert.resolved_at.isoformat() + 'Z' if alert.resolved_at else None,
+                created_at=alert.created_at.isoformat() + 'Z',
             )
         )
 
@@ -201,7 +203,112 @@ async def list_alerts(
         page=page,
         page_size=page_size,
         total_pages=total_pages,
-        alerts=alerts,
+        items=alerts,
+    )
+
+
+@router.get("/alerts/stats", response_model=AlertStatsResponse)
+async def get_alert_stats(
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Get alert statistics.
+
+    Args:
+        start: Start date filter (ISO format)
+        end: End date filter (ISO format)
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Alert statistics
+    """
+    user_id = current_user["id"]
+
+    # Get user's organizations
+    org_result = await db.execute(
+        select(OrganizationMember.organization_id).where(
+            OrganizationMember.user_id == user_id
+        )
+    )
+    org_ids = [row[0] for row in org_result.fetchall()]
+
+    if not org_ids:
+        return AlertStatsResponse(
+            total=0,
+            active=0,
+            resolved=0,
+            critical=0,
+            warning=0,
+            info=0,
+        )
+
+    # Build base query
+    query = select(Alert).where(Alert.organization_id.in_(org_ids))
+
+    # Apply date filters
+    if start:
+        from datetime import datetime
+        start_date = datetime.fromisoformat(start)
+        query = query.where(Alert.created_at >= start_date)
+    if end:
+        from datetime import datetime
+        end_date = datetime.fromisoformat(end)
+        query = query.where(Alert.created_at <= end_date)
+
+    # Get total count
+    total_result = await db.execute(
+        select(func.count()).select_from(query.subquery())
+    )
+    total = total_result.scalar() or 0
+
+    # Get active count
+    active_result = await db.execute(
+        select(func.count()).select_from(
+            query.where(Alert.status != "resolved").subquery()
+        )
+    )
+    active = active_result.scalar() or 0
+
+    # Get resolved count
+    resolved_result = await db.execute(
+        select(func.count()).select_from(
+            query.where(Alert.status == "resolved").subquery()
+        )
+    )
+    resolved = resolved_result.scalar() or 0
+
+    # Get severity counts
+    critical_result = await db.execute(
+        select(func.count()).select_from(
+            query.where(Alert.severity == "critical").subquery()
+        )
+    )
+    critical = critical_result.scalar() or 0
+
+    warning_result = await db.execute(
+        select(func.count()).select_from(
+            query.where(Alert.severity == "warning").subquery()
+        )
+    )
+    warning = warning_result.scalar() or 0
+
+    info_result = await db.execute(
+        select(func.count()).select_from(
+            query.where(Alert.severity == "info").subquery()
+        )
+    )
+    info = info_result.scalar() or 0
+
+    return AlertStatsResponse(
+        total=total,
+        active=active,
+        resolved=resolved,
+        critical=critical,
+        warning=warning,
+        info=info,
     )
 
 
@@ -265,10 +372,9 @@ async def get_alert(
         message=alert.message,
         value=alert.value,
         threshold=alert.threshold,
-        resolved=alert.resolved,
-        resolved_at=alert.resolved_at.isoformat() if alert.resolved_at else None,
-        created_at=alert.created_at.isoformat(),
-        updated_at=alert.updated_at.isoformat(),
+        resolved=alert.status == "resolved",
+        resolved_at=alert.resolved_at.isoformat() + 'Z' if alert.resolved_at else None,
+        created_at=alert.created_at.isoformat() + 'Z',
     )
 
 
@@ -322,45 +428,69 @@ async def create_alert(
         severity=request.severity,
         title=request.title,
         message=request.message,
-        threshold=request.threshold,
-        resolved=False,
+        threshold=request.threshold or 0.0,
+        value=0.0,
+        status="open",
     )
 
     db.add(alert)
     await db.commit()
     await db.refresh(alert)
 
-    # Send email notification for critical alerts
+    # Send email notification via DB-configured SMTP + recipients
     if request.severity in ["critical", "warning"]:
-        # Get organization members for notification
-        org_members_result = await db.execute(
-            select(OrganizationMember).where(
-                OrganizationMember.organization_id == org_id,
-                OrganizationMember.role.in_(["admin", "devops"])
+        smtp_result = await db.execute(
+            select(NotificationSmtpConfig).where(
+                NotificationSmtpConfig.organization_id == org_id,
+                NotificationSmtpConfig.enabled == True,
             )
         )
-        org_members = org_members_result.fetchall()
+        smtp_config = smtp_result.scalar_one_or_none()
 
-        # Collect email addresses
-        # TODO: Add email field to User model and get from there
-        # For now, this is a placeholder
-        to_emails = []  # Will be populated from User.email when available
+        if smtp_config:
+            # "warning" filter = warning + critical; "critical" = critical only; "all" = everything
+            severity_conditions = [
+                NotificationRecipient.severity_filter == "all",
+                NotificationRecipient.severity_filter == request.severity,
+            ]
+            if request.severity == "critical":
+                severity_conditions.append(NotificationRecipient.severity_filter == "warning")
 
-        # Send email notification
-        if to_emails:
-            email_service.send_alert_notification(
-                to_emails=to_emails,
-                alert_data={
-                    "id": alert.id,
-                    "server_hostname": server.hostname,
-                    "type": request.type,
-                    "severity": request.severity,
-                    "message": request.message,
-                    "threshold": request.threshold,
-                    "actual_value": alert.value,
-                    "triggered_at": alert.created_at.isoformat(),
-                }
+            recipients_result = await db.execute(
+                select(NotificationRecipient).where(
+                    NotificationRecipient.organization_id == org_id,
+                    NotificationRecipient.enabled == True,
+                    or_(*severity_conditions),
+                )
             )
+            recipients = recipients_result.scalars().all()
+            to_emails = [r.email for r in recipients]
+
+            if to_emails:
+                try:
+                    svc = EmailService(
+                        host=smtp_config.host,
+                        port=smtp_config.port,
+                        username=smtp_config.username,
+                        password=smtp_config.password,
+                        from_address=smtp_config.from_address or smtp_config.username,
+                        use_tls=smtp_config.use_tls,
+                    )
+                    svc.send_alert_notification(
+                        to_emails=to_emails,
+                        alert_data={
+                            "id": alert.id,
+                            "server_hostname": server.hostname,
+                            "type": request.type,
+                            "severity": request.severity,
+                            "message": request.message,
+                            "threshold": request.threshold,
+                            "actual_value": alert.value,
+                            "triggered_at": alert.created_at.isoformat() + 'Z',
+                        }
+                    )
+                except Exception as email_err:
+                    logger.error("Alert email failed: %s", email_err)
 
     return AlertResponse(
         id=alert.id,
@@ -373,10 +503,9 @@ async def create_alert(
         message=alert.message,
         value=alert.value,
         threshold=alert.threshold,
-        resolved=alert.resolved,
-        resolved_at=alert.resolved_at.isoformat() if alert.resolved_at else None,
-        created_at=alert.created_at.isoformat(),
-        updated_at=alert.updated_at.isoformat(),
+        resolved=alert.status == "resolved",
+        resolved_at=alert.resolved_at.isoformat() + 'Z' if alert.resolved_at else None,
+        created_at=alert.created_at.isoformat() + 'Z',
     )
 
 
@@ -451,10 +580,9 @@ async def update_alert(
         message=alert.message,
         value=alert.value,
         threshold=alert.threshold,
-        resolved=alert.resolved,
-        resolved_at=alert.resolved_at.isoformat() if alert.resolved_at else None,
-        created_at=alert.created_at.isoformat(),
-        updated_at=alert.updated_at.isoformat(),
+        resolved=alert.status == "resolved",
+        resolved_at=alert.resolved_at.isoformat() + 'Z' if alert.resolved_at else None,
+        created_at=alert.created_at.isoformat() + 'Z',
     )
 
 
@@ -504,7 +632,7 @@ async def resolve_alert(
 
     # Resolve alert
     from datetime import datetime
-    alert.resolved = True
+    alert.status = "resolved"
     alert.resolved_at = datetime.utcnow()
 
     await db.commit()
@@ -527,10 +655,9 @@ async def resolve_alert(
         message=alert.message,
         value=alert.value,
         threshold=alert.threshold,
-        resolved=alert.resolved,
-        resolved_at=alert.resolved_at.isoformat() if alert.resolved_at else None,
-        created_at=alert.created_at.isoformat(),
-        updated_at=alert.updated_at.isoformat(),
+        resolved=True,
+        resolved_at=alert.resolved_at.isoformat() + 'Z',
+        created_at=alert.created_at.isoformat() + 'Z',
     )
 
 
@@ -581,103 +708,3 @@ async def delete_alert(
     # Delete alert
     await db.delete(alert)
     await db.commit()
-
-
-@router.get("/alerts/stats", response_model=AlertStatsResponse)
-async def get_alert_stats(
-    start: Optional[str] = Query(None),
-    end: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user),
-):
-    """Get alert statistics.
-
-    Args:
-        start: Start date filter (ISO format)
-        end: End date filter (ISO format)
-        db: Database session
-        current_user: Current authenticated user
-
-    Returns:
-        Alert statistics
-    """
-    user_id = current_user["id"]
-
-    # Get user's organizations
-    org_result = await db.execute(
-        select(OrganizationMember.organization_id).where(
-            OrganizationMember.user_id == user_id
-        )
-    )
-    org_ids = [row[0] for row in org_result.fetchall()]
-
-    if not org_ids:
-        return AlertStatsResponse(
-            total=0,
-            active=0,
-            resolved=0,
-            critical=0,
-            warning=0,
-            info=0,
-        )
-
-    # Build base query
-    query = select(Alert).where(Alert.organization_id.in_(org_ids))
-
-    # Apply date filters
-    if start:
-        from datetime import datetime
-        start_date = datetime.fromisoformat(start)
-        query = query.where(Alert.created_at >= start_date)
-    if end:
-        from datetime import datetime
-        end_date = datetime.fromisoformat(end)
-        query = query.where(Alert.created_at <= end_date)
-
-    # Get total count
-    total_result = await db.execute(
-        select(func.count()).select_from(query.subquery())
-    )
-    total = total_result.scalar() or 0
-
-    # Get active count
-    active_result = await db.execute(
-        select(func.count()).select_from(
-            query.where(Alert.resolved == False).subquery()
-        )
-    )
-    active = active_result.scalar() or 0
-
-    # Get resolved count
-    resolved = total - active
-
-    # Get severity counts
-    critical_result = await db.execute(
-        select(func.count()).select_from(
-            query.where(Alert.severity == "critical").subquery()
-        )
-    )
-    critical = critical_result.scalar() or 0
-
-    warning_result = await db.execute(
-        select(func.count()).select_from(
-            query.where(Alert.severity == "warning").subquery()
-        )
-    )
-    warning = warning_result.scalar() or 0
-
-    info_result = await db.execute(
-        select(func.count()).select_from(
-            query.where(Alert.severity == "info").subquery()
-        )
-    )
-    info = info_result.scalar() or 0
-
-    return AlertStatsResponse(
-        total=total,
-        active=active,
-        resolved=resolved,
-        critical=critical,
-        warning=warning,
-        info=info,
-    )

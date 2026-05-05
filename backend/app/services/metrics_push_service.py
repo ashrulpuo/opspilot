@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 from uuid import uuid4
 
-from sqlalchemy import select, desc
+from sqlalchemy import delete, select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.server import Server
@@ -14,6 +14,9 @@ from app.models.server_metrics_push import ServerMetricsPushSample
 
 # GET /metrics prefers push payload when newer than this age
 PUSH_FRESHNESS = timedelta(minutes=5)
+
+# Keep only this many recent rows per server — avoids unbounded table growth
+PUSH_RETENTION_ROWS = 120  # ~1h at 30s push interval
 
 
 async def insert_push_sample(
@@ -29,6 +32,21 @@ async def insert_push_sample(
         payload=payload,
     )
     db.add(row)
+    # Prune old rows — keep only the most recent PUSH_RETENTION_ROWS per server
+    cutoff_subq = (
+        select(ServerMetricsPushSample.recorded_at)
+        .where(ServerMetricsPushSample.server_id == server_id)
+        .order_by(desc(ServerMetricsPushSample.recorded_at))
+        .limit(1)
+        .offset(PUSH_RETENTION_ROWS - 1)
+        .scalar_subquery()
+    )
+    await db.execute(
+        delete(ServerMetricsPushSample).where(
+            ServerMetricsPushSample.server_id == server_id,
+            ServerMetricsPushSample.recorded_at < cutoff_subq,
+        )
+    )
 
 
 async def mark_agent_seen(db: AsyncSession, server: Server) -> None:

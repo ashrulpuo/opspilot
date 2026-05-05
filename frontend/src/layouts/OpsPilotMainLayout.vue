@@ -99,7 +99,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useMediaQuery } from '@vueuse/core'
-import { User, ArrowDown, Menu, Odometer, Monitor, Bell, Promotion, OfficeBuilding, Setting } from '@element-plus/icons-vue'
+import { User, ArrowDown, Menu, Odometer, Monitor, Bell, Promotion, OfficeBuilding, Setting, Files } from '@element-plus/icons-vue'
 import { useOpsPilotAuthStore } from '@/stores/modules/opspilot'
 import { mainLayoutChildren } from '@/routers/main-layout-routes'
 
@@ -116,11 +116,13 @@ function onNavRouteCommand(path: string) {
 
 const ICON_MAP: Record<string, typeof Odometer> = {
   Dashboard: Odometer,
+  Odometer,
   Monitor,
   Bell,
   Promotion,
   OfficeBuilding,
   Setting,
+  Files,
 }
 
 function menuIcon(metaIcon?: string) {

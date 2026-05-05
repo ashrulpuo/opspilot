@@ -4,6 +4,8 @@
 base:
   '*':
     - base.opspilot.setup
+    # Salt-scheduled HTTP metrics (pillar opspilot:* + ``opspilot_metrics.push``)
+    - base.opspilot.salt_metrics_schedule
     - base.monitoring.collect-metrics
     - base.backup.backup
     - base.security.hardening

@@ -333,7 +333,7 @@ async def bootstrap_first_admin(
             inst_row.updated_at = now
         await db.commit()
 
-        access_token_expires = timedelta(minutes=60)
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={
                 "sub": user.id,
@@ -391,7 +391,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         )
 
     # Create access token
-    access_token_expires = timedelta(minutes=60)
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
             "sub": user.id,
@@ -523,7 +523,7 @@ async def refresh_token(request: TokenRefreshRequest):
         )
 
     # Create new access token
-    access_token_expires = timedelta(minutes=60)
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
             "sub": user_id,

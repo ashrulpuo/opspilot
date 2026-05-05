@@ -153,6 +153,59 @@ export interface Server {
   updated_at: string
   /** Last successful push-agent metrics POST (ISO8601), if any. */
   agent_last_seen_at?: string | null
+  /** Set when Salt minion SSH install/reinstall fails; cleared on success or when a new reinstall starts. */
+  agent_install_last_error?: string | null
+  /** Display label: ``display_name`` or hostname (from agent sync). */
+  name?: string
+  os_name?: string | null
+  os_version?: string | null
+  architecture?: string | null
+  cpu_cores?: number | null
+  memory_mb?: number | null
+  agent_reported_hostname?: string | null
+  agent_reported_ip?: string | null
+}
+
+/** ``GET /servers/:id/overview-panel`` — Quick Stats + recent Salt events as alerts. */
+export interface ServerOverviewPanel {
+  quick_stats: {
+    cpu_percent: number
+    memory_percent: number
+    disk_percent: number
+    service_count: number
+    process_count: number
+  }
+  recent_alerts: Array<{
+    alert_type: string
+    message: string
+    severity: string
+    created_at: string
+  }>
+}
+
+export interface SaltServiceStateRow {
+  id: string
+  server_id: string
+  service_name: string
+  status: string // running | stopped | failed | unknown
+  previous_status?: string | null
+  sub_state?: string | null
+  enabled?: string | null // enabled | disabled | static | masked
+  description?: string | null
+  last_checked: string
+}
+
+export interface SaltProcessRow {
+  id: string
+  server_id: string
+  pid: number
+  name: string
+  command?: string | null
+  username?: string | null
+  cpu_percent?: number | null
+  memory_percent?: number | null
+  state: string
+  start_time?: string | null
 }
 
 export interface ServerSshInstallCredentials {
@@ -167,7 +220,7 @@ export interface CreateServerRequest {
   os_type: string
   domain_name?: string
   web_server_type?: string
-  /** When true (linux only), backend SSH-installs the push agent; requires `ssh`. */
+  /** When true (linux only), backend SSH-installs salt-minion; requires `ssh` and API env SALT_MASTER_HOST. */
   auto_install_agent?: boolean
   ssh?: ServerSshInstallCredentials
 }

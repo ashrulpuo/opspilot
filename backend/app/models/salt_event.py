@@ -1,6 +1,5 @@
 """Salt event model."""
-from datetime import datetime
-from sqlalchemy import Column, DateTime, String, ForeignKey
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects import postgresql
 
@@ -17,8 +16,8 @@ class SaltEvent(Base):
     event_tag = Column(String, nullable=False)
     event_type = Column(String, nullable=False, index=True)  # 'cpu_alert', 'memory_alert', etc.
     event_data = Column(postgresql.JSONB(), nullable=False)
-    processed = Column(String, nullable=False, default=False, index=True)
+    processed = Column(Boolean, nullable=False, default=False, index=True)
     created_at = Column(DateTime, nullable=False, index=True)
     
     # Relationships
-    server = relationship("Server", back_populates="events")
+    server = relationship("Server", back_populates="salt_events")

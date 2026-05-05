@@ -23,8 +23,9 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY frontend/ .
 
-# Public API origin for production builds (same as browser origin when API is reverse-proxied under /api)
-ARG VITE_API_URL=http://127.0.0.1:8000
+# Same-origin deploys: leave unset (SPA uses window.location.origin at runtime).
+# Split API host: docker build --build-arg VITE_API_URL=https://api.example.com ...
+ARG VITE_API_URL=
 ENV VITE_API_URL=$VITE_API_URL
 
 # Production bundle (skip vue-tsc: upstream has type errors unrelated to runtime)

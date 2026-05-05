@@ -8,56 +8,37 @@
         </el-col>
         <el-col :span="8" class="text-right">
           <el-button-group>
-            <el-button 
-              v-if="isAutoScroll"
-              type="info"
-              size="small"
-              :icon="VideoPause"
-              @click="toggleAutoScroll"
-            >
-              Pause
-            </el-button>
-            <el-button 
-              v-else
+            <el-button
               type="primary"
               size="small"
-              :icon="VideoPlay"
-              @click="toggleAutoScroll"
+              :icon="RefreshRight"
+              :loading="loading"
+              @click="fetchLogs(1)"
             >
-              Auto Scroll
+              Refresh
             </el-button>
-            <el-button 
-              type="success" 
+            <el-button
+              type="success"
               size="small"
               :icon="Download"
               @click="downloadLogs"
             >
               Download
             </el-button>
-            <el-button 
-              type="danger" 
-              size="small"
-              :icon="Delete"
-              @click="clearLogs"
-            >
-              Clear
-            </el-button>
           </el-button-group>
         </el-col>
       </el-row>
     </div>
-    
+
     <!-- Log Stats -->
     <el-row :gutter="20" class="log-stats">
       <el-col :span="6">
         <el-card shadow="never">
           <div class="stat-card stat-total">
-            <div class="stat-icon">
-              <el-icon :size="30"><Document /></el-icon>
-            </div>
+            <div class="stat-icon"><el-icon :size="30"><Document /></el-icon></div>
             <div class="stat-content">
               <div class="stat-label">Total Logs</div>
-              <div class="stat-value">{{ totalLogs }}</div>
+              <div class="stat-value">{{ stats.total }}</div>
             </div>
           </div>
         </el-card>
@@ -65,12 +46,10 @@
       <el-col :span="6">
         <el-card shadow="never">
           <div class="stat-card stat-info">
-            <div class="stat-icon">
-              <el-icon :size="30"><InfoFilled /></el-icon>
-            </div>
+            <div class="stat-icon"><el-icon :size="30"><InfoFilled /></el-icon></div>
             <div class="stat-content">
               <div class="stat-label">Info</div>
-              <div class="stat-value">{{ infoLogs }}</div>
+              <div class="stat-value">{{ stats.info }}</div>
             </div>
           </div>
         </el-card>
@@ -78,12 +57,10 @@
       <el-col :span="6">
         <el-card shadow="never">
           <div class="stat-card stat-warn">
-            <div class="stat-icon">
-              <el-icon :size="30"><Warning /></el-icon>
-            </div>
+            <div class="stat-icon"><el-icon :size="30"><Warning /></el-icon></div>
             <div class="stat-content">
               <div class="stat-label">Warnings</div>
-              <div class="stat-value">{{ warnLogs }}</div>
+              <div class="stat-value">{{ stats.warn }}</div>
             </div>
           </div>
         </el-card>
@@ -91,88 +68,83 @@
       <el-col :span="6">
         <el-card shadow="never">
           <div class="stat-card stat-error">
-            <div class="stat-icon">
-              <el-icon :size="30"><CircleClose /></el-icon>
-            </div>
+            <div class="stat-icon"><el-icon :size="30"><CircleClose /></el-icon></div>
             <div class="stat-content">
               <div class="stat-label">Errors</div>
-              <div class="stat-value">{{ errorLogs }}</div>
+              <div class="stat-value">{{ stats.error }}</div>
             </div>
           </div>
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- Filters -->
     <el-row :gutter="20" class="log-filters">
       <el-col :span="8">
-        <el-input 
+        <el-input
           v-model="searchQuery"
           placeholder="Search logs..."
           clearable
+          @input="onSearchInput"
+          @clear="fetchLogs(1)"
         >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
+          <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
       </el-col>
       <el-col :span="8">
-        <el-select 
-          v-model="selectedLevel" 
+        <el-select
+          v-model="selectedLevel"
           placeholder="Filter by level"
           clearable
           style="width: 100%;"
+          @change="fetchLogs(1)"
         >
-          <el-option 
-            v-for="level in logLevels" 
-            :key="level.value" 
-            :label="level.label" 
+          <el-option
+            v-for="level in logLevels"
+            :key="level.value"
+            :label="level.label"
             :value="level.value"
           >
-            <el-tag :type="level.type" size="small">
-              {{ level.label }}
-            </el-tag>
+            <el-tag :type="level.type" size="small">{{ level.label }}</el-tag>
           </el-option>
         </el-select>
       </el-col>
-      <el-col :span="8">
-        <el-select 
-          v-model="selectedSource" 
-          placeholder="Filter by source"
-          clearable
-          style="width: 100%;"
-        >
-          <el-option 
-            v-for="source in logSources" 
-            :key="source" 
-            :label="source" 
-            :value="source"
-          />
-        </el-select>
-      </el-col>
     </el-row>
-    
+
+    <!-- Source chips -->
+    <div class="source-chips" v-if="sourceStats.length > 0">
+      <el-tag
+        :class="['source-chip', selectedSource === '' ? 'chip-active' : '']"
+        size="default"
+        @click="selectSource('')"
+      >
+        All
+        <span class="chip-count">{{ stats.total }}</span>
+      </el-tag>
+      <el-tag
+        v-for="s in sourceStats"
+        :key="s.source"
+        :class="['source-chip', selectedSource === s.source ? 'chip-active' : '']"
+        size="default"
+        @click="selectSource(s.source)"
+      >
+        {{ s.source }}
+        <span class="chip-count">{{ s.count }}</span>
+      </el-tag>
+    </div>
+
     <!-- Logs Container -->
     <el-card shadow="never" class="logs-container">
-      <div 
-        ref="logsContainerRef"
-        class="logs-content"
-        v-loading="loading"
-      >
-        <!-- Log Entries -->
-        <div 
-          v-for="log in filteredLogs" 
+      <div class="logs-content" v-loading="loading">
+        <div
+          v-for="(log, idx) in logItems"
           :key="log.id"
           :class="['log-entry', `log-level-${log.log_level.toLowerCase()}`]"
+          @click="openDrawer(idx)"
         >
-          <!-- Log Header -->
           <div class="log-header">
             <div class="log-level">
-              <el-tag 
-                :type="getLevelType(log.log_level)"
-                effect="dark"
-                size="small"
-              >
+              <el-tag :type="getLevelType(log.log_level)" effect="dark" size="small">
                 {{ log.log_level }}
               </el-tag>
             </div>
@@ -180,356 +152,343 @@
               <el-icon><Service /></el-icon>
               <span>{{ log.source }}</span>
             </div>
-            <div class="log-timestamp">
-              {{ formatTimestamp(log.timestamp) }}
-            </div>
+            <div class="log-timestamp">{{ formatTimestamp(log.timestamp) }}</div>
+            <el-icon class="log-expand-hint"><ArrowRight /></el-icon>
           </div>
-          
-          <!-- Log Message -->
           <div class="log-message">
-            <pre>{{ highlightSearch(log.message) }}</pre>
+            <pre>{{ truncateMessage(log.message) }}</pre>
           </div>
-          
-          <!-- Metadata -->
-          <el-collapse v-if="log.metadata && Object.keys(log.metadata).length > 0">
-            <el-collapse-item title="Metadata">
-              <el-descriptions :column="1" border size="small">
-                <el-descriptions-item 
-                  v-for="(value, key) in log.metadata" 
-                  :key="key"
-                  :label="key"
-                >
-                  {{ formatMetadataValue(value) }}
-                </el-descriptions-item>
-              </el-descriptions>
-            </el-collapse-item>
-          </el-collapse>
         </div>
-        
-        <!-- Empty State -->
-        <el-empty 
-          v-if="!loading && filteredLogs.length === 0" 
+
+        <el-empty
+          v-if="!loading && logItems.length === 0"
           description="No logs found"
           :image-size="100"
         >
           <el-icon :size="50" color="#909399"><Document /></el-icon>
         </el-empty>
       </div>
+
+      <!-- Pagination -->
+      <div class="logs-pagination" v-if="total > 0">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[25, 50, 100, 200]"
+          layout="total, sizes, prev, pager, next, jumper"
+          @current-change="fetchLogs"
+          @size-change="onPageSizeChange"
+        />
+      </div>
     </el-card>
+
+    <!-- Log Detail Drawer -->
+    <el-drawer
+      v-model="drawerVisible"
+      direction="rtl"
+      size="50%"
+      :with-header="false"
+      class="log-detail-drawer"
+    >
+      <div v-if="activeLog" class="drawer-content">
+        <div class="drawer-header">
+          <div class="drawer-title-row">
+            <el-tag :type="getLevelType(activeLog.log_level)" effect="dark" size="default">
+              {{ activeLog.log_level }}
+            </el-tag>
+            <span class="drawer-source">
+              <el-icon><Service /></el-icon>
+              {{ activeLog.source }}
+            </span>
+            <span class="drawer-ts">{{ formatTimestamp(activeLog.timestamp) }}</span>
+          </div>
+          <div class="drawer-actions">
+            <el-button-group>
+              <el-button size="small" :disabled="activeIndex === 0" @click="navigate(-1)">
+                <el-icon><ArrowLeft /></el-icon> Prev
+              </el-button>
+              <el-button size="small" :disabled="activeIndex === logItems.length - 1" @click="navigate(1)">
+                Next <el-icon><ArrowRight /></el-icon>
+              </el-button>
+            </el-button-group>
+            <el-button size="small" :icon="CopyDocument" @click="copyMessage">Copy</el-button>
+            <el-button size="small" :icon="Close" @click="drawerVisible = false" />
+          </div>
+        </div>
+
+        <div class="drawer-section">
+          <div class="drawer-section-label">Message</div>
+          <pre class="drawer-message">{{ activeLog.message }}</pre>
+        </div>
+
+        <div v-if="activeLog.extra && Object.keys(activeLog.extra).length > 0" class="drawer-section">
+          <div class="drawer-section-label">Extra</div>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item
+              v-for="(value, key) in activeLog.extra"
+              :key="key"
+              :label="String(key)"
+            >
+              <pre class="extra-value">{{ formatMetadataValue(value) }}</pre>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <div class="drawer-nav-hint">{{ activeIndex + 1 }} / {{ logItems.length }}</div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  Document,
-  InfoFilled,
-  Warning,
-  CircleClose,
-  Search,
-  Service,
-  Download,
-  Delete,
-  VideoPlay,
-  VideoPause
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import {
+  Document, InfoFilled, Warning, CircleClose,
+  Search, Service, Download, RefreshRight,
+  ArrowLeft, ArrowRight, CopyDocument, Close,
 } from '@element-plus/icons-vue'
+import request from '@/api/opspilot/client'
 
-import { useSaltStream } from '@/composables/useSaltStream'
-
-// Types
 interface LogEntry {
   id: string
-  server_id: string
   timestamp: string
   log_level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG'
   source: string
   message: string
-  metadata?: Record<string, any>
+  extra?: Record<string, any>
 }
 
-// Props
-const props = defineProps<{
-  serverId: string
-}>()
+interface LogStats {
+  total: number
+  info: number
+  warn: number
+  error: number
+  debug: number
+}
 
-// Use SSE composable
-const { logs, isConnected, disconnectAll, clearLogs: clearStoreLogs } = useSaltStream(props.serverId)
+interface LogsPagedResponse {
+  items: LogEntry[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  stats: LogStats
+}
 
-// Reactive state
+const props = defineProps<{ serverId: string }>()
+
+const logItems = ref<LogEntry[]>([])
+const stats = ref<LogStats>({ total: 0, info: 0, warn: 0, error: 0, debug: 0 })
+const sourceStats = ref<{ source: string; count: number }[]>([])
+const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(50)
+const total = ref(0)
 const searchQuery = ref('')
 const selectedLevel = ref('')
 const selectedSource = ref('')
-const loading = ref(false)
-const isAutoScroll = ref(true)
-const logsContainerRef = ref<HTMLElement | null>(null)
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
 
-// Log level options
 const logLevels = [
   { label: 'DEBUG', value: 'DEBUG', type: 'info' },
-  { label: 'INFO', value: 'INFO', type: 'info' },
-  { label: 'WARN', value: 'WARN', type: 'warning' },
-  { label: 'ERROR', value: 'ERROR', type: 'danger' }
+  { label: 'INFO',  value: 'INFO',  type: 'info' },
+  { label: 'WARN',  value: 'WARN',  type: 'warning' },
+  { label: 'ERROR', value: 'ERROR', type: 'danger' },
 ]
 
-// Computed: Logs list
-const logList = computed(() => {
-  return logs.value.filter(l => l.server_id === props.serverId)
-})
+const fetchLogs = async (page = currentPage.value) => {
+  loading.value = true
+  currentPage.value = page
+  try {
+    const params: Record<string, any> = { page, page_size: pageSize.value }
+    if (selectedLevel.value) { params.level = selectedLevel.value }
+    if (selectedSource.value) { params.source = selectedSource.value }
+    if (searchQuery.value) { params.search = searchQuery.value }
 
-// Computed: Unique sources
-const logSources = computed(() => {
-  const sources = new Set<string>()
-  logList.value.forEach(l => sources.add(l.source))
-  return Array.from(sources).sort()
-})
-
-// Computed: Filtered logs
-const filteredLogs = computed(() => {
-  let filtered = logList.value
-  
-  // Filter by level
-  if (selectedLevel.value) {
-    filtered = filtered.filter(l => l.log_level === selectedLevel.value)
-  }
-  
-  // Filter by source
-  if (selectedSource.value) {
-    filtered = filtered.filter(l => l.source === selectedSource.value)
-  }
-  
-  // Filter by search query
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(l => 
-      l.message.toLowerCase().includes(query) ||
-      l.source.toLowerCase().includes(query) ||
-      (l.metadata && JSON.stringify(l.metadata).toLowerCase().includes(query))
+    const data = await request.get<LogsPagedResponse>(
+      `/servers/${props.serverId}/salt/logs`,
+      { params }
     )
+    logItems.value = data.items ?? []
+    total.value = data.total ?? 0
+    stats.value = data.stats ?? { total: 0, info: 0, warn: 0, error: 0, debug: 0 }
+  } catch {
+    // empty state shown
+  } finally {
+    loading.value = false
   }
-  
-  return filtered
-})
+}
 
-// Computed: Log stats
-const totalLogs = computed(() => logList.value.length)
-const infoLogs = computed(() => logList.value.filter(l => l.log_level === 'INFO').length)
-const warnLogs = computed(() => logList.value.filter(l => l.log_level === 'WARN').length)
-const errorLogs = computed(() => logList.value.filter(l => l.log_level === 'ERROR').length)
+const fetchSourceStats = async () => {
+  try {
+    const data = await request.get<{ source: string; count: number }[]>(
+      `/servers/${props.serverId}/salt/logs/source-stats`
+    )
+    sourceStats.value = Array.isArray(data) ? data : []
+  } catch {
+    // ignore
+  }
+}
 
-// Helper functions
+const selectSource = (src: string) => {
+  selectedSource.value = src
+  fetchLogs(1)
+}
+
+const onSearchInput = () => {
+  if (searchDebounce) { clearTimeout(searchDebounce) }
+  searchDebounce = setTimeout(() => fetchLogs(1), 300)
+}
+
+const onPageSizeChange = () => fetchLogs(1)
+
+// Drawer state
+const drawerVisible = ref(false)
+const activeIndex = ref(0)
+const activeLog = computed(() => logItems.value[activeIndex.value] ?? null)
+
+const openDrawer = (idx: number) => {
+  activeIndex.value = idx
+  drawerVisible.value = true
+}
+
+const navigate = (delta: number) => {
+  const next = activeIndex.value + delta
+  if (next >= 0 && next < logItems.value.length) { activeIndex.value = next }
+}
+
+const copyMessage = () => {
+  if (!activeLog.value) { return }
+  navigator.clipboard.writeText(activeLog.value.message).then(() => {
+    ElMessage({ message: 'Copied', type: 'success', duration: 1500 })
+  })
+}
+
+const truncateMessage = (msg: string) => {
+  return msg.length > 300 ? msg.slice(0, 300) + '…' : msg
+}
+
 const getLevelType = (level: string) => {
   switch (level) {
-    case 'DEBUG': return 'info'
-    case 'INFO': return 'success'
-    case 'WARN': return 'warning'
+    case 'INFO':  return 'success'
+    case 'WARN':  return 'warning'
     case 'ERROR': return 'danger'
-    default: return 'info'
+    default:      return 'info'
   }
 }
 
-const formatTimestamp = (timestamp: string) => {
-  const date = new Date(timestamp)
-  return date.toLocaleString()
-}
+const formatTimestamp = (ts: string) => new Date(ts).toLocaleString()
 
-const formatMetadataValue = (value: any) => {
-  if (typeof value === 'object') {
-    return JSON.stringify(value, null, 2)
-  }
-  return String(value)
-}
-
-const highlightSearch = (message: string) => {
-  if (!searchQuery.value) {
-    return message
-  }
-  
-  const query = searchQuery.value
-  const regex = new RegExp(`(${query})`, 'gi')
-  return message.replace(regex, '<mark>$1</mark>')
-}
-
-// Actions
-const toggleAutoScroll = () => {
-  isAutoScroll.value = !isAutoScroll.value
-}
+const formatMetadataValue = (value: any) =>
+  typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
 
 const downloadLogs = async () => {
   try {
-    // Convert logs to JSON
-    const logsData = filteredLogs.value.map(log => ({
-      timestamp: log.timestamp,
-      level: log.log_level,
-      source: log.source,
-      message: log.message,
-      metadata: log.metadata
-    }))
-    
-    // Create blob
-    const blob = new Blob([JSON.stringify(logsData, null, 2)], { type: 'application/json' })
+    const params: Record<string, any> = { page: 1, page_size: 5000 }
+    if (selectedLevel.value) { params.level = selectedLevel.value }
+    if (selectedSource.value) { params.source = selectedSource.value }
+    if (searchQuery.value) { params.search = searchQuery.value }
+
+    const data = await request.get<LogsPagedResponse>(
+      `/servers/${props.serverId}/salt/logs`,
+      { params }
+    )
+    const blob = new Blob([JSON.stringify(data.items, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
-    
-    // Download
     const link = document.createElement('a')
     link.href = url
     link.download = `server-${props.serverId}-logs-${new Date().toISOString()}.json`
     link.click()
-    
-    // Cleanup
     URL.revokeObjectURL(url)
-    
-    ElMessage({
-      message: 'Logs downloaded successfully',
-      type: 'success',
-      duration: 3000
-    })
-  } catch (error) {
-    console.error('Failed to download logs:', error)
+    ElMessage({ message: 'Logs downloaded', type: 'success', duration: 2000 })
+  } catch {
     ElMessage.error('Failed to download logs')
   }
 }
 
-const clearLogs = async () => {
-  try {
-    await ElMessageBox.confirm(
-      'Are you sure you want to clear all logs? This action cannot be undone.',
-      'Clear Logs',
-      {
-        confirmButtonText: 'Clear',
-        cancelButtonText: 'Cancel',
-        type: 'danger'
-      }
-    )
-    
-    clearStoreLogs()
-    
-    ElMessage({
-      message: 'Logs cleared successfully',
-      type: 'success',
-      duration: 3000
-    })
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('Failed to clear logs:', error)
-      ElMessage.error('Failed to clear logs')
-    }
-  }
-}
-
-// Auto-scroll to bottom when new logs arrive
-watch(filteredLogs, async () => {
-  if (isAutoScroll.value) {
-    await nextTick()
-    if (logsContainerRef.value) {
-      logsContainerRef.value.scrollTop = logsContainerRef.value.scrollHeight
-    }
-  }
-})
-
-// Lifecycle
 onMounted(() => {
-  console.log('Salt Logs component mounted for server:', props.serverId)
+  fetchLogs(1)
+  fetchSourceStats()
+  // auto-refresh only on page 1 (live tail)
+  refreshTimer = setInterval(() => {
+    if (currentPage.value === 1) { fetchLogs(1) }
+  }, 30_000)
 })
 
 onUnmounted(() => {
-  console.log('Salt Logs component unmounted')
+  if (refreshTimer) { clearInterval(refreshTimer) }
+  if (searchDebounce) { clearTimeout(searchDebounce) }
 })
 </script>
 
 <style scoped>
-.salt-logs {
-  padding: 20px;
-}
+.salt-logs { padding: 20px; }
 
-.logs-header {
-  margin-bottom: 20px;
-}
+.logs-header { margin-bottom: 20px; }
+.logs-header h2 { margin: 0; font-size: 20px; font-weight: 600; color: #303133; }
 
-.logs-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
-}
+.log-stats { margin-bottom: 20px; }
 
-.log-stats {
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
+.stat-card { display: flex; align-items: center; gap: 20px; }
 .stat-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 60px; height: 60px; border-radius: 8px;
+}
+.stat-total .stat-icon { background: #f5f7fa; }
+.stat-info  .stat-icon { background: #f0f9ff; }
+.stat-warn  .stat-icon { background: #fdf6ec; }
+.stat-error .stat-icon { background: #fef0f0; }
+
+.stat-content { flex: 1; }
+.stat-label { font-size: 12px; color: #909399; margin-bottom: 5px; }
+.stat-value { font-size: 24px; font-weight: 600; color: #303133; }
+.stat-info  .stat-value { color: #67C23A; }
+.stat-warn  .stat-value { color: #E6A23C; }
+.stat-error .stat-value { color: #F56C6C; }
+
+.log-filters { margin-bottom: 12px; }
+
+.source-chips {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
 }
-
-.stat-total .stat-icon {
+.source-chip {
+  cursor: pointer;
+  user-select: none;
+  border-color: #DCDFE6;
   background: #f5f7fa;
+  color: #606266;
+  transition: all 0.2s;
+}
+.source-chip:hover { border-color: #409EFF; color: #409EFF; background: #ecf5ff; }
+.source-chip.chip-active { border-color: #409EFF; background: #409EFF; color: #fff; }
+.chip-count {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 11px;
+  opacity: 0.8;
 }
 
-.stat-info .stat-icon {
-  background: #f0f9ff;
-}
-
-.stat-warn .stat-icon {
-  background: #fdf6ec;
-}
-
-.stat-error .stat-icon {
-  background: #fef0f0;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 5px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.stat-info .stat-value {
-  color: #67C23A;
-}
-
-.stat-warn .stat-value {
-  color: #E6A23C;
-}
-
-.stat-error .stat-value {
-  color: #F56C6C;
-}
-
-.log-filters {
-  margin-bottom: 20px;
-}
-
-.logs-container {
-  background: white;
-}
+.logs-container { background: white; }
 
 .logs-content {
-  max-height: 600px;
+  min-height: 200px;
+  max-height: 560px;
   overflow-y: auto;
   background: #f5f7fa;
   padding: 10px;
   border-radius: 4px;
+}
+
+.logs-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 0 4px;
 }
 
 .log-entry {
@@ -540,106 +499,89 @@ onUnmounted(() => {
   border-radius: 4px;
   transition: all 0.3s;
 }
+.log-entry:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
 
-.log-entry:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.log-level-debug {
-  border-left-color: #909399;
-}
-
-.log-level-info {
-  border-left-color: #67C23A;
-}
-
-.log-level-warn {
-  border-left-color: #E6A23C;
-  background: #fdf6ec;
-}
-
-.log-level-error {
-  border-left-color: #F56C6C;
-  background: #fef0f0;
-}
+.log-level-debug { border-left-color: #909399; }
+.log-level-info  { border-left-color: #67C23A; }
+.log-level-warn  { border-left-color: #E6A23C; background: #fdf6ec; }
+.log-level-error { border-left-color: #F56C6C; background: #fef0f0; }
 
 .log-header {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 8px;
-  font-size: 12px;
+  display: flex; align-items: center; gap: 15px;
+  margin-bottom: 8px; font-size: 12px;
 }
+.log-source { display: flex; align-items: center; gap: 5px; color: #606266; }
+.log-timestamp { margin-left: auto; color: #909399; }
 
-.log-source {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #606266;
-}
-
-.log-timestamp {
-  margin-left: auto;
-  color: #909399;
-}
-
-.log-message {
-  margin: 8px 0;
-}
-
+.log-message { margin: 8px 0; }
 .log-message pre {
   margin: 0;
   font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 13px;
-  color: #303133;
-  white-space: pre-wrap;
-  word-wrap: break-word;
+  font-size: 13px; color: #303133;
+  white-space: pre-wrap; word-wrap: break-word;
 }
 
-.log-message mark {
-  background: #ffe58f;
-  padding: 2px 4px;
-  border-radius: 2px;
+.log-entry { cursor: pointer; }
+.log-expand-hint { margin-left: auto; color: #C0C4CC; font-size: 12px; }
+.log-entry:hover .log-expand-hint { color: #409EFF; }
+
+/* Drawer */
+.log-detail-drawer :deep(.el-drawer__body) { padding: 0; overflow: hidden; }
+
+.drawer-content {
+  display: flex; flex-direction: column; height: 100vh;
+  background: #1e1e1e; color: #d4d4d4;
 }
 
-.log-entry :deep(.el-collapse) {
-  margin-top: 10px;
+.drawer-header {
+  padding: 16px 20px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+.drawer-title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.drawer-source { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9cdcfe; }
+.drawer-ts { font-size: 12px; color: #6a9955; margin-left: auto; }
+.drawer-actions { display: flex; align-items: center; gap: 8px; }
+.drawer-actions :deep(.el-button) { background: #3c3c3c; border-color: #555; color: #d4d4d4; }
+.drawer-actions :deep(.el-button:hover) { background: #505050; border-color: #777; }
+
+.drawer-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid #3c3c3c;
+  overflow-y: auto;
+  flex: 1;
+}
+.drawer-section-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: #6a9955; margin-bottom: 10px;
 }
 
-.log-entry :deep(.el-collapse-item__header) {
-  font-size: 12px;
-  padding: 0;
+.drawer-message {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Courier New', monospace;
+  font-size: 13px; line-height: 1.6;
+  color: #d4d4d4;
+  white-space: pre-wrap; word-wrap: break-word;
+  background: transparent;
 }
 
-.log-entry :deep(.el-collapse-item__wrap) {
-  background: #f5f7fa;
-  border-radius: 4px;
+.extra-value {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 12px; color: #ce9178;
+  white-space: pre-wrap; word-wrap: break-word;
+  background: transparent;
 }
 
-.log-entry :deep(.el-descriptions) {
-  font-size: 12px;
+.drawer-nav-hint {
+  padding: 10px 20px; text-align: right;
+  font-size: 12px; color: #6a9955;
+  background: #252526; flex-shrink: 0;
 }
 
-.log-entry :deep(.el-descriptions__label) {
-  color: #909399;
-}
-
-/* Scrollbar styling */
-.logs-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.logs-content::-webkit-scrollbar-track {
-  background: #f5f7fa;
-  border-radius: 4px;
-}
-
-.logs-content::-webkit-scrollbar-thumb {
-  background: #DCDFE6;
-  border-radius: 4px;
-}
-
-.logs-content::-webkit-scrollbar-thumb:hover {
-  background: #C0C4CC;
-}
+.logs-content::-webkit-scrollbar { width: 8px; }
+.logs-content::-webkit-scrollbar-track { background: #f5f7fa; border-radius: 4px; }
+.logs-content::-webkit-scrollbar-thumb { background: #DCDFE6; border-radius: 4px; }
+.logs-content::-webkit-scrollbar-thumb:hover { background: #C0C4CC; }
 </style>

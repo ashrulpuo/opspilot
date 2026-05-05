@@ -81,18 +81,16 @@ class SSEService:
         try:
             payload = jwt.decode(
                 token,
-                settings.jwt_secret_key,
-                algorithms=[settings.jwt_algorithm]
+                settings.SECRET_KEY,
+                algorithms=[settings.ALGORITHM]
             )
-            
+
             # Verify required claims
             user_id = payload.get('sub')
             if not user_id:
                 raise ValueError("Invalid token: missing 'sub' claim")
-            
+
             organization_id = payload.get('organization_id')
-            if not organization_id:
-                raise ValueError("Invalid token: missing 'organization_id' claim")
             
             exp = payload.get('exp')
             if exp and datetime.utcnow().timestamp() > exp:
@@ -191,28 +189,20 @@ class SSEService:
                 await pubsub.subscribe(channel)
                 logger.info(f"Subscribed to Redis channel: {channel}")
                 
-                # Send initial connection message
-                yield f"event: connected\ndata: {json.dumps({'channel': channel, 'timestamp': datetime.utcnow().isoformat()})}\n\n"
-                
-                # Stream messages from Redis
+                # Unnamed message so EventSource.onmessage fires (named events skip onmessage)
+                yield f"data: {json.dumps({'type': 'connected', 'channel': channel, 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+
                 async for message in pubsub.listen():
                     if message['type'] == 'message':
                         try:
                             data = json.loads(message['data'])
-                            
-                            # Add user/org context to message
                             data['user_id'] = user_id
                             data['organization_id'] = org_id
                             data['timestamp'] = datetime.utcnow().isoformat()
-                            
-                            # Format as SSE message
-                            event_type = data.get('event_type', 'metric')
-                            yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
-                            
+                            yield f"data: {json.dumps(data)}\n\n"
                         except json.JSONDecodeError as e:
                             logger.error(f"Failed to parse SSE message: {e}")
-                            # Send error to client
-                            yield f"event: error\ndata: {json.dumps({'message': 'Failed to parse message', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+                            yield f"data: {json.dumps({'type': 'error', 'message': 'parse failed', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
                     
                     # Send keepalive message every 30s
                     # This is handled by Redis health check, but we can also send explicit keepalive
@@ -227,7 +217,11 @@ class SSEService:
                 await pubsub.unsubscribe(channel)
                 await r.close()
                 logger.info(f"Unsubscribed from Redis channel: {channel}")
-    
+
+        except Exception as e:
+            logger.error("SSE subscribe_and_stream failed: %s", e, exc_info=True)
+            yield f"event: error\ndata: {json.dumps({'message': str(e), 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+
     async def subscribe_and_stream_with_keepalive(
         self,
         channel: str,
@@ -265,7 +259,8 @@ class SSEService:
             # Subscribe to Redis channel
             r = await self._get_redis()
             pubsub = r.pubsub()
-            
+            keepalive = None
+
             try:
                 # Subscribe to channel
                 await pubsub.subscribe(channel)
@@ -313,7 +308,12 @@ class SSEService:
             
             finally:
                 # Cleanup: Unsubscribe, close Redis, cancel keepalive
-                keepalive.cancel()
+                if keepalive is not None:
+                    keepalive.cancel()
                 await pubsub.unsubscribe(channel)
                 await r.close()
                 logger.info(f"Unsubscribed from Redis channel: {channel}")
+
+        except Exception as e:
+            logger.error("SSE subscribe_and_stream_with_keepalive failed: %s", e, exc_info=True)
+            yield f"event: error\ndata: {json.dumps({'message': str(e), 'timestamp': datetime.utcnow().isoformat()})}\n\n"

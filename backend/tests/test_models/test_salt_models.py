@@ -259,10 +259,10 @@ class TestSaltLog:
             log_level="INFO",
             source="nginx",
             message="Configuration reloaded successfully",
-            metadata={
+            extra={
                 "config_file": "/etc/nginx/nginx.conf",
                 "pid": 1234
-            }
+            },
         )
         
         db_session.add(log)
@@ -273,7 +273,7 @@ class TestSaltLog:
         assert log.log_level == "INFO"
         assert log.source == "nginx"
         assert log.message == "Configuration reloaded successfully"
-        assert log.metadata["config_file"] == "/etc/nginx/nginx.conf"
+        assert log.extra["config_file"] == "/etc/nginx/nginx.conf"
     
     def test_log_error_level(self, db_session: Session):
         """Test error log entry."""

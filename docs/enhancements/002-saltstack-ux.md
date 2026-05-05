@@ -1001,6 +1001,51 @@ watch(isActive, (active) => {
 
 ---
 
+## Goal: Full UX Using Only the Auto-Installed Salt Minion (2026-04-21)
+
+**Intent:** Everything in this document should ultimately be **backed by data collected on the managed host via Salt** (no separate long-running “OpsPilot push agent” daemon). **OpsPilot still receives that data over HTTPS** — that is unavoidable for a web app — but collection/scheduling/credentials live in **Salt** (execution modules, `salt-call`, pillar, schedules).
+
+### What already matches the UX layout
+
+The **Server detail** area in the Vue app follows this structure:
+
+| UX tab (this doc) | Implemented component | Notes |
+|-------------------|----------------------|--------|
+| Header | `ServerDetailHeader.vue` | Actions, status |
+| Overview | `ServerOverview.vue` | Summary cards |
+| Metrics | `SaltMetrics.vue` | Charts / gauges |
+| Salt Info | `SaltInfo.vue` | Grains, minion metadata |
+| Services | `SaltServices.vue` | systemd-style rows |
+| Processes | `SaltProcesses.vue` | Process table |
+| Packages | `SaltPackages.vue` | Package list |
+| Logs | `SaltLogs.vue` | Log viewer |
+| Alerts | `SaltAlerts.vue` | Alert list |
+
+So **the screens exist**; the remaining work is **end-to-end data**: Salt must **produce** the payloads the backend **stores** and the UI **reads** (REST + optional SSE).
+
+### Salt-minion-only data path (target)
+
+1. **Minion** is installed by OpsPilot “add server” / reinstall (**003**), id `opspilot-minion-{server_id}`.
+2. **Pillar** `opspilot` holds `api_base_url`, `server_id`, `organization_id`, `api_key` (set from backend).
+3. **Execution module(s)** on the minion (e.g. `opspilot_metrics`, extend or add siblings) run on a **schedule** (`salt_metrics_schedule` / cron) and **POST** structured JSON to OpsPilot ingestion routes that match what each tab expects.
+4. **Backend** persists rows (metrics samples, services, processes, …) and exposes GET APIs + SSE the Vue components already call.
+
+Today the **narrow slice** implemented is **minimal host metrics** (`loadavg`, memory %) via `salt/salt/_modules/opspilot_metrics.py` → `POST /api/v1/servers/{id}/metrics`. **Tabs that need rich structures** (full metrics matrix, services/processes/packages/logs/alerts as in the wireframes) still need:
+
+- Salt-side collection aligned with **`salt_api_client.ingest_*`** / existing Salt ingestion endpoints, **or**
+- Expanded payloads from scheduled `salt-call` modules plus matching DB/API contracts.
+
+### Practical next steps (ordered)
+
+1. **Define one JSON schema per tab** (services list, processes list, …) shared by Salt module output and API ingest.
+2. **Extend Salt modules** (or Salt states + `cmd.run`) to emit those payloads on the same cron schedule.
+3. **Wire ingest → DB → GET** so each tab’s component stops using placeholders / partial data.
+4. **SSE (001)** — optional layer on top once REST payloads are reliable.
+
+Until those steps land, the UI may show **layout and partial data**; it will not yet reflect **every** wireframe detail from this file on every tab.
+
+---
+
 ## Ready for Implementation
 
 **UI/UX Design Status:** ✅ Complete
@@ -1017,7 +1062,7 @@ watch(isActive, (active) => {
 - ✅ Performance optimizations
 - ✅ Visual polish (animations, loading states)
 
-**Next Step:** Proceed with Phase 4 - Backend Implementation
+**Next Step:** Implement **Salt-minion data contracts + ingestion** per section *Goal: Full UX Using Only the Auto-Installed Salt Minion* above (UI shell largely done).
 
 ---
 

@@ -120,6 +120,40 @@ async def test_ingest_metrics_rejects_wrong_key(ingest_client):
 
 @pytest.mark.asyncio
 @pytest.mark.unit
+async def test_ingest_host_profile_without_metrics_succeeds(ingest_client):
+    """Snapshot pushes may send host_profile + empty metrics dict."""
+    client, sid, oid, key = ingest_client
+    r = await client.post(
+        f"/api/v1/servers/{sid}/metrics",
+        headers={"X-API-Key": key},
+        json={
+            "server_id": sid,
+            "organization_id": oid,
+            "metrics": {},
+            "host_profile": {"hostname": "minion1", "cpu_cores": 4},
+        },
+    )
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_ingest_empty_payload_rejected(ingest_client):
+    client, sid, oid, key = ingest_client
+    r = await client.post(
+        f"/api/v1/servers/{sid}/metrics",
+        headers={"X-API-Key": key},
+        json={
+            "server_id": sid,
+            "organization_id": oid,
+            "metrics": {},
+        },
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
 async def test_ingest_metrics_rejects_org_mismatch(ingest_client):
     client, sid, _oid, key = ingest_client
     r = await client.post(

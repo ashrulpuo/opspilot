@@ -104,7 +104,7 @@ const form = reactive({
   confirm_password: '',
 })
 
-const validateConfirm = (rule: unknown, value: string, callback: (e?: Error) => void) => {
+const validateConfirm = (rule: unknown, value: string, callback: (_err?: Error) => void) => {
   if (value !== form.password) {
     callback(new Error('Passwords do not match'))
   } else {
@@ -166,11 +166,26 @@ function setupErrorMessage(error: unknown): string {
       return 'The API returned 404. Set VITE_API_URL to your OpsPilot backend origin (e.g. http://127.0.0.1:8000) with no /api/v1 suffix, ensure the server is running, then restart the dev server.'
     }
     if (status === 403) {
+      const detail = (error.response?.data as { detail?: string } | undefined)?.detail
+      if (detail === 'Setup already completed') {
+        return 'Setup was already completed for this server. Open the login page and sign in with an existing admin account.'
+      }
       return 'Initial setup is not allowed (for example, a user already exists). Use a fresh database or sign in instead.'
     }
-    const detail = error.response?.data && (error.response.data as { detail?: unknown }).detail
+    if (status === 429) {
+      const detail = (error.response?.data as { detail?: string } | undefined)?.detail
+      return typeof detail === 'string' ? detail : 'Too many setup attempts. Wait and try again.'
+    }
+    const raw = error.response?.data as { detail?: unknown } | undefined
+    const detail = raw?.detail
     if (typeof detail === 'string') {
       return detail
+    }
+    if (Array.isArray(detail)) {
+      const msgs = detail.map((e: { msg?: string }) => e.msg).filter(Boolean)
+      if (msgs.length) {
+        return msgs.join(' ')
+      }
     }
   }
   const err = error as { message?: string }

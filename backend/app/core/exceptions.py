@@ -1,6 +1,15 @@
 """Custom exceptions and exception handlers."""
+import logging
+import traceback
+
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class OpsPilotError(Exception):
@@ -57,6 +66,27 @@ class ServiceUnavailableError(OpsPilotError):
 def register_exception_handlers(app: FastAPI) -> None:
     """Register exception handlers for FastAPI app."""
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        logger.warning("422 validation error on %s: %s", request.url.path, exc.errors())
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": exc.errors()},
+        )
+
+    @app.exception_handler(OperationalError)
+    async def sqlalchemy_operational_handler(request: Request, exc: OperationalError):
+        """DB unreachable, auth failures at connect, etc."""
+        logger.warning("Database operational error on %s: %s", request.url.path, exc)
+        content: dict = {"error": "Database temporarily unavailable"}
+        if settings.DEBUG:
+            content["detail"] = str(exc)
+            content["exception_type"] = type(exc).__name__
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=content,
+        )
+
     @app.exception_handler(OpsPilotError)
     async def opspilot_error_handler(request: Request, exc: OpsPilotError):
         """Handle OpsPilot base exception."""
@@ -68,8 +98,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         """Handle all uncaught exceptions."""
-        # In production, log this error
+        logger.exception("Unhandled error on %s", request.url.path)
+        content: dict = {"error": "Internal server error"}
+        if settings.DEBUG:
+            content["detail"] = str(exc)
+            content["exception_type"] = type(exc).__name__
+            content["traceback"] = traceback.format_exc()
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"error": "Internal server error"},
+            content=content,
         )

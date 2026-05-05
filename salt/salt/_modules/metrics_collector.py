@@ -11,6 +11,11 @@ import requests
 import socket
 
 
+def collect():
+    """Salt execution module entrypoint used by Salt API/local calls."""
+    return get_system_metrics()
+
+
 def get_system_metrics():
     """Collect comprehensive system metrics."""
     hostname = socket.gethostname()

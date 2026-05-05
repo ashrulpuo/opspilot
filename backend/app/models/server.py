@@ -1,6 +1,6 @@
 """Server models."""
 from datetime import datetime
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -18,9 +18,21 @@ class Server(Base):
     os_type = Column(String, nullable=False)  # 'linux', 'windows', 'macos'
     web_server_type = Column(String)  # 'nginx', 'apache', 'caddy', 'none'
     domain_name = Column(String)
-    status = Column(String, nullable=False, default="active")  # 'active', 'inactive', 'error'
+    status = Column(String, nullable=False, default="offline")  # 'provisioning'|'installing_agent'|'offline'|'online'|'error'|'warning'
     agent_api_key_hash = Column(String, nullable=True, index=True)
+    # Last Salt minion SSH auto-install / reinstall failure (cleared on success); not a stack trace.
+    agent_install_last_error = Column(Text, nullable=True)
     agent_last_seen_at = Column(DateTime, nullable=True)
+    display_name = Column(String, nullable=True)
+    agent_reported_hostname = Column(String, nullable=True)
+    agent_reported_ip = Column(String, nullable=True)
+    agent_os_name = Column(String, nullable=True)
+    agent_os_version = Column(String, nullable=True)
+    agent_architecture = Column(String, nullable=True)
+    agent_cpu_cores = Column(Integer, nullable=True)
+    agent_memory_mb = Column(Integer, nullable=True)
+    agent_facts_synced_at = Column(DateTime, nullable=True)
+    host_info = Column(JSON, nullable=True)
     # OpsPilot-initiated SSH (password stored Fernet-encrypted; never expose via public API)
     ssh_username = Column(String, nullable=True)
     ssh_port = Column(Integer, nullable=True)

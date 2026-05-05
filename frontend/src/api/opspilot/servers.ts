@@ -4,7 +4,16 @@
  */
 
 import request from './client'
-import type { Server, CreateServerRequest, UpdateServerRequest, ApplyStateRequest, ApplyStateResponse } from './types'
+import type {
+  Server,
+  CreateServerRequest,
+  UpdateServerRequest,
+  ApplyStateRequest,
+  ApplyStateResponse,
+  ServerOverviewPanel,
+  SaltServiceStateRow,
+  SaltProcessRow,
+} from './types'
 
 export const ServersAPI = {
   /**
@@ -46,6 +55,17 @@ export const ServersAPI = {
   },
 
   /**
+   * Re-queue SSH Salt minion install (stored SSH creds, Linux only).
+   */
+  reinstallSaltMinion: (id: string): Promise<Server> => {
+    return request.post<Server>(`/servers/${id}/reinstall-salt-minion`)
+  },
+
+  redeployAgent: (id: string): Promise<Server> => {
+    return request.post<Server>(`/servers/${id}/redeploy-agent`)
+  },
+
+  /**
    * Apply Salt state to server
    */
   applyState: (id: string, data: ApplyStateRequest): Promise<ApplyStateResponse> => {
@@ -57,6 +77,23 @@ export const ServersAPI = {
    */
   collectMetrics: (id: string): Promise<{ server_id: string; metrics: any }> => {
     return request.get<{ server_id: string; metrics: any }>(`/servers/${id}/metrics`)
+  },
+
+  /** Overview tab: gauges + counts + recent Salt events (JWT). */
+  getOverviewPanel: (id: string): Promise<ServerOverviewPanel> => {
+    return request.get<ServerOverviewPanel>(`/servers/${id}/overview-panel`)
+  },
+
+  getSaltServices: (id: string): Promise<SaltServiceStateRow[]> => {
+    return request.get<SaltServiceStateRow[]>(`/servers/${id}/salt/services`)
+  },
+
+  getSaltProcesses: (id: string): Promise<SaltProcessRow[]> => {
+    return request.get<SaltProcessRow[]>(`/servers/${id}/salt/processes`)
+  },
+
+  getHostInfo: (id: string): Promise<any> => {
+    return request.get<any>(`/servers/${id}/host-info`)
   },
 
   /**

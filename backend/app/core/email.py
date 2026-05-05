@@ -14,14 +14,21 @@ logger = logging.getLogger(__name__)
 class EmailService:
     """Email service for sending notifications."""
 
-    def __init__(self):
-        """Initialize email service."""
-        self.smtp_host = settings.email_smtp_host
-        self.smtp_port = settings.email_smtp_port
-        self.smtp_username = settings.email_smtp_username
-        self.smtp_password = settings.email_smtp_password
-        self.smtp_from = settings.email_smtp_from or settings.email_smtp_username
-        self.smtp_use_tls = settings.email_smtp_use_tls
+    def __init__(
+        self,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        from_address: Optional[str] = None,
+        use_tls: Optional[bool] = None,
+    ):
+        self.smtp_host = host if host is not None else settings.email_smtp_host
+        self.smtp_port = port if port is not None else settings.email_smtp_port
+        self.smtp_username = username if username is not None else settings.email_smtp_username
+        self.smtp_password = password if password is not None else settings.email_smtp_password
+        self.smtp_from = from_address if from_address is not None else (settings.email_smtp_from or settings.email_smtp_username)
+        self.smtp_use_tls = use_tls if use_tls is not None else settings.email_smtp_use_tls
 
     def send_email(
         self,

@@ -1,9 +1,13 @@
 # SaltStack Data Collection Implementation Plan
 
-**ID:** 002
-**Category:** infrastructure
-**Date:** 2026-04-17
-**Status:** 📋 Ready to Implement
+**ID:** 002  
+**Category:** infrastructure  
+**Date:** 2026-04-17  
+**Status:** 📋 Ready to Implement  
+
+> **Deployed addition (2026-04-21):** SSH installation of **`salt-minion`** when adding a server (optional Linux + credentials) is documented in **[003-salt-minion-ssh-auto-install.md](./003-salt-minion-ssh-auto-install.md)**. It uses **`SALT_MASTER_HOST`** and minion id **`opspilot-minion-{server_id}`**, which must stay aligned with pillar setup in `server_service.py`. The table below remains the original planning Q&A; row “Minion Deployment” is superseded if you enable UI auto-install.
+
+> **Salt-only metrics push (2026-04-21):** Metrics to OpsPilot use the Salt **execution module** **`opspilot_metrics.push`** (`salt/salt/_modules/opspilot_metrics.py`), pillar key namespace **`opspilot`**, and **`base.opspilot.salt_metrics_schedule`** (scheduled `salt-call`). A separate **systemd “OpsPilot push agent”** is **not** deployed by SSH install or by `base/opspilot/setup.sls` — this matches the PRD intent that the minion path pushes to the backend API via Salt rather than a second long-running HTTP agent process.
 
 ## Clarifications (Before Implementation)
 

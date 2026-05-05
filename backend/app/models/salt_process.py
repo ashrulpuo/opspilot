@@ -19,10 +19,11 @@ class SaltProcess(Base):
     command = Column(Text, nullable=True)  # Full command line
     username = Column(String, nullable=True)
     cpu_percent = Column(Float, nullable=True)  # CPU usage
-    memory_percent = Column(Float, nullable=True)  # Memory usage
+    memory_percent = Column(Float, nullable=True)  # Memory usage %
+    memory_mb = Column(Float, nullable=True)       # RSS in MB
     state = Column(String, nullable=False)  # R, S, D, Z, T, W
     start_time = Column(DateTime, nullable=True)  # Process start time
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships
-    server = relationship("Server", back_populates="processes")
+    server = relationship("Server", back_populates="salt_processes")

@@ -14,6 +14,11 @@ class Settings(BaseSettings):
         extra="allow",
     )
 
+    # When True: verbose logging, SQL echo, FastAPI debug, and JSON error responses include details (dev only).
+    DEBUG: bool = False
+    # Root log level when DEBUG is False (e.g. INFO, WARNING). Ignored when DEBUG is True (uses DEBUG).
+    LOG_LEVEL: str = "INFO"
+
     # API
     API_V1_STR: str = "/api/v1"
     # Base URL agents use to reach this API (scheme + host + API_V1_STR), e.g. http://api:8000/api/v1
@@ -65,10 +70,15 @@ class Settings(BaseSettings):
     salt_api_url: str = "http://localhost:8000"
     salt_api_username: str = "saltapi"
     salt_api_password: str = "saltapi"
+    # Hostname or IP of Salt master as seen by new minions (SSH auto-install writes /etc/salt/minion.d).
+    SALT_MASTER_HOST: str = ""
 
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6384/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6384/2"
+
+    # Registry asset encryption (Fernet key — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    ASSET_ENCRYPTION_KEY: str = "ZGV2LW9wc3BpbG90LXJlZ2lzdHJ5LWVuY3J5cHRrZXk="
 
     # Monitoring
     ENABLE_METRICS: bool = True

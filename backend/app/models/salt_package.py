@@ -24,4 +24,4 @@ class SaltPackage(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships
-    server = relationship("Server", back_populates="packages")
+    server = relationship("Server", back_populates="salt_packages")

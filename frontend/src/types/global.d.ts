@@ -31,7 +31,8 @@ declare global {
     VITE_PWA: boolean
     VITE_DEVTOOLS: boolean
     VITE_PUBLIC_PATH: string
-    VITE_API_URL: string
+    /** When unset in production, the API client uses the SPA host (same-origin + /api proxy). */
+    VITE_API_URL?: string
     /** Optional; defaults from VITE_API_URL (ws/wss). */
     VITE_WS_URL?: string
     /** When set, Vite allows this Host and uses WSS HMR through reverse proxy :443. */

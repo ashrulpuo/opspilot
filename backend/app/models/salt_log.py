@@ -1,6 +1,6 @@
 """Salt log model."""
 from datetime import datetime
-from sqlalchemy import Column, DateTime, String, ForeignKey
+from sqlalchemy import Column, DateTime, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects import postgresql
 
@@ -18,8 +18,9 @@ class SaltLog(Base):
     log_level = Column(String, nullable=False)  # INFO, WARN, ERROR, DEBUG
     source = Column(String, nullable=False)  # nginx, mysql, redis, cron, etc.
     message = Column(Text, nullable=False)
-    metadata = Column(postgresql.JSONB(), nullable=True)  # Additional structured data
+    # Python name cannot be `metadata` (reserved on Declarative base); DB column stays "metadata".
+    extra = Column("metadata", postgresql.JSONB(), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships
-    server = relationship("Server", back_populates="logs")
+    server = relationship("Server", back_populates="salt_logs")

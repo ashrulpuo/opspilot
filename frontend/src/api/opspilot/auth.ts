@@ -23,6 +23,8 @@ export const AuthAPI = {
   getSetupRequired: (): Promise<SetupRequiredResponse> => {
     return request.get<SetupRequiredResponse>('/auth/setup-required', {
       skipAuth: true,
+      // skipRefresh skips pending-request dedup; otherwise a second identical GET aborts the first (DevTools: cancelled).
+      skipRefresh: true,
     } as CustomAxiosRequestConfig)
   },
 
@@ -32,6 +34,7 @@ export const AuthAPI = {
   bootstrap: (data: BootstrapRequest): Promise<LoginResponse> => {
     return request.post<LoginResponse>('/auth/bootstrap', data, {
       skipAuth: true,
+      suppressGlobalErrorToast: true,
     } as CustomAxiosRequestConfig)
   },
 

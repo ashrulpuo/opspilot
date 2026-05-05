@@ -38,12 +38,12 @@ class SaltAPIClient:
     
     def __init__(self):
         """Initialize Salt API client."""
-        self.api_key = settings.salt_api_key
-        self.timeout = settings.salt_api_timeout
-        self.max_retries = settings.salt_api_max_retries
-        
+        self.api_key = settings.SALT_API_KEY
+        self.timeout = 30.0
+        self.max_retries = 3
+
         # Redis connection for publishing SSE events
-        self.redis_url = settings.redis_url
+        self.redis_url = settings.REDIS_URL
         self.redis_pool = None
     
     async def _get_redis(self):
@@ -406,7 +406,7 @@ class SaltAPIClient:
                 for log_data in logs:
                     if isinstance(log_data, dict) or isinstance(log_data, list):
                         # Handle both dict and list formats
-                        log_entries = [log_data] if isinstance(log_data, dict) else log_data]
+                        log_entries = [log_data] if isinstance(log_data, dict) else log_data
                         
                         for log_entry in log_entries:
                             log = SaltLog(
@@ -475,7 +475,7 @@ class SaltAPIClient:
                     'event_tag': event_tag,
                     'event_type': event_type,
                     'event_data': event_data,
-                    'created_at': datetime.utcnow().isoformat()
+                    'created_at': datetime.utcnow().isoformat() + 'Z'
                 }
             )
             
@@ -551,7 +551,7 @@ class SaltAPIClient:
             for log_data in logs_list:
                 if isinstance(log_data, dict) or isinstance(log_data, list):
                     # Handle both dict and list formats
-                    log_entries = [log_data] if isinstance(log_data, dict) else log_data]
+                    log_entries = [log_data] if isinstance(log_data, dict) else log_data
                     
                     for log_entry in log_entries:
                         log = SaltLog(

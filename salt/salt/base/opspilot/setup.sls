@@ -1,28 +1,20 @@
-# OpsPilot Salt Setup State
-# Installs and configures OpsPilot agent on servers
+# OpsPilot Salt — minion baseline (PRD 002: minions push to backend API via Salt)
+#
+# Metrics: use execution module ``opspilot_metrics.push`` (``salt/salt/_modules/opspilot_metrics.py``)
+# and ``base.opspilot.salt_metrics_schedule`` (cron). Pillar ``opspilot`` is set by OpsPilot API.
+#
+# Do not deploy the legacy standalone systemd push-agent here; SSH install also no longer deploys it.
 
-{% set opspilot_config = salt['pillar'].get('opspilot', {}) %}
-
-# Install required packages
+# Shared packages (backup / scripts / troubleshooting)
 opspilot-packages:
   pkg.installed:
     - names:
-      - python3-pip
       - curl
       - wget
       - jq
     - refresh: True
 
-# Install Python packages for OpsPilot agent
-opspilot-python-deps:
-  pip.installed:
-    - names:
-      - requests
-      - psutil
-      - aiohttp
-    - upgrade: True
-
-# Create OpsPilot user
+# System user + dirs used by backup/monitoring states (see base.backup.backup, base.monitoring.*)
 opspilot-user:
   user.present:
     - name: opspilot
@@ -30,70 +22,18 @@ opspilot-user:
     - home: /opt/opspilot
     - createhome: True
 
-# Create OpsPilot directories
 opspilot-directories:
   file.directory:
     - names:
-      - /opt/opspilot/bin
-      - /opt/opspilot/logs
-      - /opt/opspilot/config
       - /opt/opspilot/scripts
+      - /opt/opspilot/logs
       - /var/log/opspilot
     - user: opspilot
     - mode: '0755'
     - makedirs: True
 
-# Deploy OpsPilot agent script
-opspilot-agent:
-  file.managed:
-    - name: /opt/opspilot/bin/opspilot-agent.py
-    - source: salt://opspilot/opspilot-agent.py
-    - user: opspilot
-    - group: opspilot
-    - mode: '0755'
-
-# Configure OpsPilot agent (JSON for push agent)
-opspilot-config:
-  file.managed:
-    - name: /opt/opspilot/config/agent.json
-    - source: salt://opspilot/agent.json.jinja
-    - user: opspilot
-    - group: opspilot
-    - mode: '0644'
-    - template: jinja
-    - context:
-      api_base_url: {{ opspilot_config.get('api_base_url', opspilot_config.get('api_url', 'http://127.0.0.1:8000/api/v1')) }}
-      api_key: {{ opspilot_config.get('api_key') }}
-      server_id: {{ opspilot_config.get('server_id', '') }}
-      organization_id: {{ opspilot_config.get('organization_id') }}
-      interval_seconds: {{ opspilot_config.get('metrics_interval', 60) }}
-
-# Configure OpsPilot systemd service
-opspilot-service:
-  file.managed:
-    - name: /etc/systemd/system/opspilot-agent.service
-    - source: salt://opspilot/opspilot-agent.service
-    - mode: '0644'
-
-  cmd.run:
-    - name: reload systemd
-    - onchanges:
-      - /etc/systemd/system/opspilot-agent.service
-    - run: systemctl daemon-reload
-
-opspilot-service-enabled:
-  service.enabled:
+# If this minion was previously managed by an older state that installed ``opspilot-agent.service``, stop it.
+legacy_opspilot_push_agent_stopped:
+  service.dead:
     - name: opspilot-agent
-    - enable: True
-    - require:
-      - file: /etc/systemd/system/opspilot-agent.service
-      - cmd: reload systemd
-
-opspilot-service-running:
-  service.running:
-    - name: opspilot-agent
-    - enable: True
-    - require:
-      - service: opspilot-service-enabled
-      - file: opspilot-agent
-      - file: opspilot-config
+    - enable: False

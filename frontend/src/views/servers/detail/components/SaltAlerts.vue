@@ -180,8 +180,9 @@
             </div>
             <div class="alert-type">
               <el-icon><Warning /></el-icon>
-              <span>{{ alert.alert_type }}</span>
+              <span>{{ alert.title || alert.alert_type }}</span>
             </div>
+            <el-tag v-if="alert.source === 'live'" type="success" size="small" effect="plain">live</el-tag>
             <div class="alert-timestamp">
               {{ formatTimestamp(alert.created_at) }}
             </div>
@@ -291,7 +292,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
+import {
   Bell,
   Check,
   Delete,
@@ -304,18 +305,19 @@ import {
 } from '@element-plus/icons-vue'
 
 import { useSaltStream } from '@/composables/useSaltStream'
+import { AlertsAPI } from '@/api/opspilot/alerts'
 
-// Types
-interface Alert {
+// Unified display type merges SSE + DB schemas
+interface DisplayAlert {
   id: string
-  server_id: string
   alert_type: string
   severity: 'info' | 'warning' | 'critical'
   message: string
-  event_data: Record<string, any>
-  processed: boolean
+  title?: string
+  event_data?: Record<string, any>
   created_at: string
-  acknowledged?: boolean
+  acknowledged: boolean
+  source: 'live' | 'db'
 }
 
 // Props
@@ -324,7 +326,10 @@ const props = defineProps<{
 }>()
 
 // Use SSE composable
-const { alerts, acknowledgeAlert as acknowledgeStoreAlert, clearAlerts: clearStoreAlerts, disconnectAll } = useSaltStream(props.serverId)
+const { alerts, acknowledgeAlert: acknowledgeStoreAlert, clearAlerts: clearStoreAlerts, disconnectAll } = useSaltStream(props.serverId)
+
+// DB-fetched historical alerts
+const historicalAlerts = ref<DisplayAlert[]>([])
 
 // Reactive state
 const searchQuery = ref('')
@@ -333,7 +338,7 @@ const selectedAlertType = ref('')
 const showOnlyUnread = ref(false)
 const loading = ref(false)
 const detailsDialogVisible = ref(false)
-const selectedAlert = ref<Alert | null>(null)
+const selectedAlert = ref<DisplayAlert | null>(null)
 
 // Severity options
 const severities = [
@@ -342,9 +347,29 @@ const severities = [
   { label: 'Critical', value: 'critical', type: 'danger' }
 ]
 
-// Computed: Alerts list
-const alertList = computed(() => {
-  return alerts.value.filter(a => a.server_id === props.serverId)
+// Normalize SSE alerts to DisplayAlert
+const sseAlerts = computed<DisplayAlert[]>(() =>
+  alerts.value
+    .filter((a: any) => a.server_id === props.serverId)
+    .map((a: any) => ({
+      id: a.id,
+      alert_type: a.alert_type,
+      severity: a.severity,
+      message: a.message,
+      event_data: a.event_data,
+      created_at: a.created_at,
+      acknowledged: a.acknowledged ?? false,
+      source: 'live' as const,
+    }))
+)
+
+// Merge SSE + DB, deduplicated by id (SSE wins on conflict)
+const alertList = computed<DisplayAlert[]>(() => {
+  const sseIds = new Set(sseAlerts.value.map(a => a.id))
+  const dbOnly = historicalAlerts.value.filter(a => !sseIds.has(a.id))
+  return [...sseAlerts.value, ...dbOnly].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
 })
 
 // Computed: Unique alert types
@@ -403,16 +428,13 @@ const getSeverityType = (severity: string) => {
 }
 
 const formatTimestamp = (timestamp: string) => {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  
+  const diffMs = Date.now() - new Date(timestamp).getTime()
+  const mins = Math.floor(diffMs / 60000)
+  const hours = Math.floor(diffMs / 3600000)
   if (diffMs < 60000) return 'Just now'
-  if (diffMs < 120000) return '1m ago'
-  if (diffMs < 300000) return '5m ago'
-  if (diffMs < 3600000) return '30m ago'
-  if (diffMs < 86400000) return '1h ago'
-  return 'More than 1d ago'
+  if (mins < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 const formatDateTime = (timestamp: string) => {
@@ -421,15 +443,12 @@ const formatDateTime = (timestamp: string) => {
 }
 
 // Actions
-const acknowledgeAlert = async (alert: Alert) => {
+const acknowledgeAlert = async (alert: DisplayAlert) => {
   try {
     acknowledgeStoreAlert(alert.id)
-    
-    ElMessage({
-      message: 'Alert acknowledged successfully',
-      type: 'success',
-      duration: 3000
-    })
+    const h = historicalAlerts.value.find(a => a.id === alert.id)
+    if (h) h.acknowledged = true
+    ElMessage({ message: 'Alert acknowledged', type: 'success', duration: 2000 })
   } catch (error) {
     console.error('Failed to acknowledge alert:', error)
     ElMessage.error('Failed to acknowledge alert')
@@ -437,29 +456,18 @@ const acknowledgeAlert = async (alert: Alert) => {
 }
 
 const acknowledgeAll = async () => {
+  const count = unreadAlerts.value
   try {
     await ElMessageBox.confirm(
-      `Are you sure you want to acknowledge all ${unreadAlerts.value} unread alerts?`,
+      `Acknowledge all ${count} unread alerts?`,
       'Acknowledge All Alerts',
-      {
-        confirmButtonText: 'Acknowledge All',
-        cancelButtonText: 'Cancel',
-        type: 'info'
-      }
+      { confirmButtonText: 'Acknowledge All', cancelButtonText: 'Cancel', type: 'info' }
     )
-    
-    // Acknowledge all unread alerts
     alertList.value.forEach(alert => {
-      if (!alert.acknowledged) {
-        acknowledgeStoreAlert(alert.id)
-      }
+      if (!alert.acknowledged) acknowledgeStoreAlert(alert.id)
     })
-    
-    ElMessage({
-      message: `Acknowledged ${unreadAlerts.value} alerts`,
-      type: 'success',
-      duration: 3000
-    })
+    historicalAlerts.value = historicalAlerts.value.map(a => ({ ...a, acknowledged: true }))
+    ElMessage({ message: `Acknowledged ${count} alerts`, type: 'success', duration: 3000 })
   } catch (error) {
     if (error !== 'cancel') {
       console.error('Failed to acknowledge alerts:', error)
@@ -495,36 +503,44 @@ const clearAllAlerts = async () => {
   }
 }
 
+const loadHistoricalAlerts = async () => {
+  try {
+    const response = await AlertsAPI.list({ server_id: props.serverId, page_size: 100 })
+    historicalAlerts.value = response.items.map(a => ({
+      id: a.id,
+      alert_type: a.type,
+      severity: a.severity,
+      message: a.message,
+      title: a.title,
+      created_at: a.created_at,
+      acknowledged: a.resolved,
+      source: 'db' as const,
+    }))
+  } catch (error) {
+    console.error('Failed to load historical alerts:', error)
+  }
+}
+
 const refreshAlerts = async () => {
   loading.value = true
-  
   try {
-    // This would trigger a fetch of historical alerts via API
-    console.log('Refreshing alerts...')
-    
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    ElMessage({
-      message: 'Alerts refreshed successfully',
-      type: 'success',
-      duration: 3000
-    })
+    await loadHistoricalAlerts()
+    ElMessage({ message: 'Alerts refreshed', type: 'success', duration: 2000 })
   } catch (error) {
-    console.error('Failed to refresh alerts:', error)
     ElMessage.error('Failed to refresh alerts')
   } finally {
     loading.value = false
   }
 }
 
-const viewAlertDetails = (alert: Alert) => {
+const viewAlertDetails = (alert: DisplayAlert) => {
   selectedAlert.value = alert
   detailsDialogVisible.value = true
 }
 
 // Lifecycle
 onMounted(() => {
-  console.log('Salt Alerts component mounted for server:', props.serverId)
+  loadHistoricalAlerts()
 })
 </script>
 

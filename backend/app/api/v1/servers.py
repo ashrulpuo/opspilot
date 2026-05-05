@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Background
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.agent_keys import generate_agent_api_key, hash_agent_api_key
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.server import Server as ServerRow
@@ -14,7 +15,7 @@ router = APIRouter()
 
 
 class ServerSshInstallCredentials(BaseModel):
-    """SSH credentials for auto-install and for future OpsPilot-initiated SSH (password encrypted at rest)."""
+    """SSH credentials for Salt minion auto-install and OpsPilot-initiated SSH (password encrypted at rest)."""
 
     username: str
     password: str
@@ -76,9 +77,23 @@ class ServerResponse(BaseModel):
     created_at: str
     updated_at: str
     agent_last_seen_at: Optional[str] = None
+    agent_install_last_error: Optional[str] = None
+    name: str
+    os_name: Optional[str] = None
+    os_version: Optional[str] = None
+    architecture: Optional[str] = None
+    cpu_cores: Optional[int] = None
+    memory_mb: Optional[int] = None
+    agent_reported_hostname: Optional[str] = None
+    agent_reported_ip: Optional[str] = None
 
 
 def server_row_to_response(server: ServerRow) -> ServerResponse:
+    label = (server.display_name and server.display_name.strip()) or server.hostname
+    os_name = server.agent_os_name
+    os_version = server.agent_os_version
+    if not os_name and server.os_type:
+        os_name = server.os_type
     return ServerResponse(
         id=server.id,
         organization_id=server.organization_id,
@@ -92,6 +107,15 @@ def server_row_to_response(server: ServerRow) -> ServerResponse:
         created_at=server.created_at.isoformat(),
         updated_at=server.updated_at.isoformat(),
         agent_last_seen_at=server.agent_last_seen_at.isoformat() if server.agent_last_seen_at else None,
+        agent_install_last_error=server.agent_install_last_error,
+        name=label,
+        os_name=os_name,
+        os_version=os_version,
+        architecture=server.agent_architecture,
+        cpu_cores=server.agent_cpu_cores,
+        memory_mb=server.agent_memory_mb,
+        agent_reported_hostname=server.agent_reported_hostname,
+        agent_reported_ip=server.agent_reported_ip,
     )
 
 
@@ -119,7 +143,7 @@ async def create_server(
     db: AsyncSession = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Create a new server and set up Salt minion.
+    """Create a new server, configure Salt pillar, and optionally SSH-install ``salt-minion``.
 
     Args:
         organization_id: Organization ID
@@ -134,6 +158,15 @@ async def create_server(
         HTTPException: If server creation fails
     """
     user_id = current_user["id"]
+
+    if request.auto_install_agent:
+        from app.core.config import get_settings
+
+        if not (get_settings().SALT_MASTER_HOST or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SALT_MASTER_HOST must be set on the API to auto-install the Salt minion",
+            )
 
     try:
         outcome = await server_service.create_server(
@@ -248,6 +281,124 @@ async def get_server(
             detail="Server not found",
         )
 
+    return server_row_to_response(server)
+
+
+@router.post("/servers/{server_id}/reinstall-salt-minion", response_model=ServerResponse)
+async def reinstall_salt_minion(
+    server_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Queue another SSH Salt minion install using stored SSH credentials (Linux only)."""
+    from app.core.config import get_settings
+
+    if not (get_settings().SALT_MASTER_HOST or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SALT_MASTER_HOST must be set on the API to reinstall the Salt minion",
+        )
+
+    user_id = current_user["id"]
+    creds = await server_service.get_decrypted_ssh_credentials(db, server_id, user_id)
+    if not creds:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Server has no stored SSH credentials; add credentials or recreate the server with auto-install",
+        )
+
+    ssh_username, ssh_port, ssh_password = creds
+    server = await server_service.get_server(db, server_id, user_id)
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Server not found",
+        )
+    if (server.os_type or "").lower() != "linux":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Salt minion reinstall is only supported for Linux servers",
+        )
+
+    # Fresh API key so the bundled push agent can be configured on the host (plaintext is never stored).
+    agent_key_plain = generate_agent_api_key()
+    server.agent_api_key_hash = hash_agent_api_key(agent_key_plain)
+    server.status = "installing_agent"
+    server.agent_install_last_error = None
+    await db.commit()
+    await db.refresh(server)
+
+    background_tasks.add_task(
+        schedule_agent_install,
+        server_id=server.id,
+        organization_id=server.organization_id,
+        ip_address=server.ip_address,
+        agent_api_key=agent_key_plain,
+        ssh_username=ssh_username,
+        ssh_password=ssh_password,
+        ssh_port=ssh_port,
+    )
+    return server_row_to_response(server)
+
+
+@router.post("/servers/{server_id}/redeploy-agent", response_model=ServerResponse)
+async def redeploy_push_agent(
+    server_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Re-upload push agent script + config via SSH and restart its systemd service.
+
+    Use after agent bundle updates. Does NOT reinstall Salt minion.
+    """
+    user_id = current_user["id"]
+    creds = await server_service.get_decrypted_ssh_credentials(db, server_id, user_id)
+    if not creds:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Server has no stored SSH credentials",
+        )
+    server = await server_service.get_server(db, server_id, user_id)
+    if not server:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
+    ssh_username, ssh_port, ssh_password = creds
+
+    agent_key_plain = generate_agent_api_key()
+    server.agent_api_key_hash = hash_agent_api_key(agent_key_plain)
+    await db.commit()
+    await db.refresh(server)
+
+    _org_id = server.organization_id
+    _ip = server.ip_address
+
+    async def _run() -> None:
+        import asyncio as _aio
+        from app.core.database import AsyncSessionLocal
+        from app.services.agent_ssh_install import deploy_push_agent_only
+
+        ok, err = await _aio.to_thread(
+            deploy_push_agent_only,
+            host=_ip,
+            port=ssh_port,
+            username=ssh_username,
+            password=ssh_password,
+            server_id=server_id,
+            organization_id=_org_id,
+            agent_api_key=agent_key_plain,
+        )
+        async with AsyncSessionLocal() as _db:
+            from sqlalchemy import select as _sel
+            r = await _db.execute(_sel(ServerRow).where(ServerRow.id == server_id))
+            sv = r.scalar_one_or_none()
+            if sv:
+                sv.status = "online" if ok else "error"
+                sv.agent_install_last_error = None if ok else (err or "redeploy failed")[:8000]
+                await _db.commit()
+
+    background_tasks.add_task(_run)
     return server_row_to_response(server)
 
 

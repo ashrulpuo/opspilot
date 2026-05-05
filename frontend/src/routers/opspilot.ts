@@ -211,10 +211,12 @@ router.beforeEach(async (to, from, next) => {
     const skipOrgGate = to.name === 'Onboarding' || to.name === 'Setup'
     if (!skipOrgGate) {
       const orgStore = useOpsPilotOrganizationStore()
-      try {
-        await orgStore.fetchOrganizations()
-      } catch (err) {
-        console.error('Failed to load organizations:', err)
+      if (orgStore.organizations.length === 0) {
+        try {
+          await orgStore.fetchOrganizations()
+        } catch (err) {
+          console.error('Failed to load organizations:', err)
+        }
       }
       if (orgStore.organizations.length === 0) {
         return next({ path: '/onboarding', replace: true })
@@ -259,7 +261,7 @@ router.onError(error => {
  */
 export const getMenuRoutes = (): RouteRecordRaw[] => {
   return mainLayoutChildren.filter(
-    route => !route.meta?.hidden && route.meta?.requiresAuth !== false && route.name && typeof route.name === 'string',
+    route => !route.meta?.hidden && route.meta?.requiresAuth !== false && route.name && typeof route.name === 'string'
   )
 }
 

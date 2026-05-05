@@ -1,59 +1,120 @@
 <template>
   <div class="server-detail">
-    <!-- Server Detail Header -->
     <ServerDetailHeader :server-id="serverId" />
-    
-    <!-- Tabs Navigation -->
+
     <el-tabs v-model="activeTab" class="server-detail-tabs">
-      <!-- Overview Tab -->
-      <el-tab-pane label="Overview" name="overview">
-        <ServerOverview :server-id="serverId" />
+      <el-tab-pane name="overview">
+        <template #label>
+          <span class="tab-label"><el-icon><Monitor /></el-icon>Overview</span>
+        </template>
+        <ServerOverview
+          v-if="visitedTabs.has('overview')"
+          v-show="activeTab === 'overview'"
+          :server-id="serverId"
+        />
       </el-tab-pane>
-      
-      <!-- Metrics Tab (Real-Time) -->
-      <el-tab-pane label="Metrics" name="metrics">
-        <ServerMetrics :server-id="serverId" />
+
+      <el-tab-pane name="metrics">
+        <template #label>
+          <span class="tab-label"><el-icon><TrendCharts /></el-icon>Metrics</span>
+        </template>
+        <ServerMetrics
+          v-if="visitedTabs.has('metrics')"
+          v-show="activeTab === 'metrics'"
+          :server-id="serverId"
+        />
       </el-tab-pane>
-      
-      <!-- Salt Info Tab -->
-      <el-tab-pane label="Salt Info" name="salt">
-        <SaltInfo :server-id="serverId" />
+
+      <el-tab-pane name="salt">
+        <template #label>
+          <span class="tab-label"><el-icon><Setting /></el-icon>Salt Info</span>
+        </template>
+        <SaltInfo
+          v-if="visitedTabs.has('salt')"
+          v-show="activeTab === 'salt'"
+          :server-id="serverId"
+        />
       </el-tab-pane>
-      
-      <!-- Services Tab (Real-Time) -->
-      <el-tab-pane label="Services" name="services">
-        <SaltServices :server-id="serverId" />
+
+      <el-tab-pane name="services">
+        <template #label>
+          <span class="tab-label"><el-icon><Tools /></el-icon>Services</span>
+        </template>
+        <SaltServices
+          v-if="visitedTabs.has('services')"
+          v-show="activeTab === 'services'"
+          :server-id="serverId"
+        />
       </el-tab-pane>
-      
-      <!-- Processes Tab (Real-Time) -->
-      <el-tab-pane label="Processes" name="processes">
-        <SaltProcesses :server-id="serverId" />
+
+      <el-tab-pane name="processes">
+        <template #label>
+          <span class="tab-label"><el-icon><List /></el-icon>Processes</span>
+        </template>
+        <SaltProcesses
+          v-if="visitedTabs.has('processes')"
+          v-show="activeTab === 'processes'"
+          :server-id="serverId"
+        />
       </el-tab-pane>
-      
-      <!-- Packages Tab -->
-      <el-tab-pane label="Packages" name="packages">
-        <SaltPackages :server-id="serverId" />
+
+      <el-tab-pane name="packages">
+        <template #label>
+          <span class="tab-label">
+            <el-icon><Box /></el-icon>Packages
+            <el-badge
+              v-if="packageUpdateCount > 0"
+              :value="packageUpdateCount"
+              class="tab-badge"
+            />
+          </span>
+        </template>
+        <SaltPackages
+          v-if="visitedTabs.has('packages')"
+          v-show="activeTab === 'packages'"
+          :server-id="serverId"
+        />
       </el-tab-pane>
-      
-      <!-- Logs Tab (Real-Time) -->
-      <el-tab-pane label="Logs" name="logs">
-        <SaltLogs :server-id="serverId" />
+
+      <el-tab-pane name="logs">
+        <template #label>
+          <span class="tab-label"><el-icon><Document /></el-icon>Logs</span>
+        </template>
+        <SaltLogs
+          v-if="visitedTabs.has('logs')"
+          v-show="activeTab === 'logs'"
+          :server-id="serverId"
+        />
       </el-tab-pane>
-      
-      <!-- Alerts Tab (Real-Time) -->
-      <el-tab-pane label="Alerts" name="alerts">
-        <SaltAlerts :server-id="serverId" />
+
+      <el-tab-pane name="alerts">
+        <template #label>
+          <span class="tab-label">
+            <el-icon><Bell /></el-icon>Live Alerts
+            <el-badge
+              v-if="unreadAlertCount > 0"
+              :value="unreadAlertCount"
+              type="danger"
+              class="tab-badge"
+            />
+          </span>
+        </template>
+        <SaltAlerts
+          v-if="visitedTabs.has('alerts')"
+          v-show="activeTab === 'alerts'"
+          :server-id="serverId"
+        />
       </el-tab-pane>
     </el-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Monitor, TrendCharts, Setting, Tools, List, Box, Document, Bell } from '@element-plus/icons-vue'
 import { useSaltStream } from '@/composables/useSaltStream'
 
-// Import components
 import ServerDetailHeader from './components/ServerDetailHeader.vue'
 import ServerOverview from './components/ServerOverview.vue'
 import ServerMetrics from './components/SaltMetrics.vue'
@@ -65,58 +126,27 @@ import SaltLogs from './components/SaltLogs.vue'
 import SaltAlerts from './components/SaltAlerts.vue'
 
 const route = useRoute()
+const router = useRouter()
 const serverId = route.params.id as string
-const activeTab = ref('overview')
 
-// Use SSE composable
-const {
-  metrics,
-  alerts,
-  serviceStates,
-  isConnected,
-  disconnectAll
-} = useSaltStream(serverId)
+const VALID_TABS = ['overview', 'metrics', 'salt', 'services', 'processes', 'packages', 'logs', 'alerts']
+const initialTab = VALID_TABS.includes(route.query.tab as string) ? (route.query.tab as string) : 'overview'
+const activeTab = ref(initialTab)
 
-// Set default tab on mount
-onMounted(() => {
-  console.log('Server detail page mounted for server:', serverId)
-  console.log('SSE connected:', isConnected.value)
-  
-  // Set default tab based on route query
-  if (route.query.tab) {
-    activeTab.value = route.query.tab as string
-  }
+// Lazy mount: tab component only mounts on first visit, then stays alive (v-show)
+const visitedTabs = reactive(new Set<string>([initialTab]))
+
+watch(activeTab, (tab) => {
+  visitedTabs.add(tab)
+  router.replace({ query: { ...route.query, tab } })
 })
 
-// Cleanup on unmount
-onUnmounted(() => {
-  console.log('Server detail page unmounted for server:', serverId)
-  disconnectAll()
-})
+const { unreadAlerts, packageUpdateCount } = useSaltStream(serverId)
 
-// Helper functions for displaying metrics
-const formatMetricValue = (value: number | undefined, unit: string) => {
-  if (value === undefined || value === null) return '-'
-  return `${value} ${unit}`
-}
-
-const getMetricColor = (value: number | undefined) => {
-  if (value === undefined) return '#909399'
-  if (value < 50) return '#67C23A'  // Green
-  if (value < 70) return '#E6A23C'  // Yellow
-  if (value < 85) return '#F59E0B'  // Orange
-  return '#F56C6C'  // Red
-}
-
-// Expose to template
-defineExpose({
-  activeTab,
-  metrics,
-  alerts,
-  serviceStates,
-  isConnected,
-  formatMetricValue,
-  getMetricColor
+const unreadAlertCount = computed(() => {
+  const val = unreadAlerts.value
+  if (!val) return 0
+  return Array.isArray(val) ? val.length : (typeof val === 'number' ? val : 0)
 })
 </script>
 
@@ -131,16 +161,46 @@ defineExpose({
 }
 
 .server-detail-tabs :deep(.el-tabs__header) {
-  font-size: 14px;
-  font-weight: 500;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--el-bg-color);
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.server-detail-tabs :deep(.el-tabs__content) {
+  padding-top: 20px;
 }
 
 .server-detail-tabs :deep(.el-tabs__item) {
-  font-size: 14px;
-  padding: 0 20px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 18px;
+  height: 44px;
+  line-height: 44px;
 }
 
-.server-detail-tabs :deep(.el-tab-pane) {
-  padding: 0;
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  position: relative;
+}
+
+.tab-badge {
+  margin-left: 4px;
+}
+
+.tab-badge :deep(.el-badge__content) {
+  transform: none;
+  position: relative;
+  top: auto;
+  right: auto;
+  font-size: 10px;
+  height: 16px;
+  line-height: 16px;
+  padding: 0 4px;
+  min-width: 16px;
 }
 </style>

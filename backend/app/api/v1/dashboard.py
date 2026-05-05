@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import load_only
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -208,9 +209,20 @@ async def get_server_health(
     )
     org_ids = [row[0] for row in org_result.fetchall()]
 
-    # Get servers
+    # Load only columns present on older DBs (migration 018 adds display_name et al.);
+    # selecting the full Server row breaks if those migrations were not applied.
     servers_query = (
         select(Server)
+        .options(
+            load_only(
+                Server.id,
+                Server.organization_id,
+                Server.hostname,
+                Server.status,
+                Server.agent_last_seen_at,
+                Server.updated_at,
+            )
+        )
         .where(
             Server.organization_id.in_(org_ids) if org_ids else False
         )
@@ -298,7 +310,7 @@ async def get_recent_alerts(
                 severity=alert.type or "info",
                 title=f"{label}",
                 message=f"Value {alert.value} (threshold {alert.threshold}) — status {alert.status}",
-                created_at=alert.created_at.isoformat(),
+                created_at=alert.created_at.isoformat() + 'Z',
             )
         )
 
